@@ -162,15 +162,12 @@ jobs:
       - name: Build workspace packages
         run: pnpm --filter './packages/*' build
 
-      - name: Build Tauri app
+      - name: Build Tauri app (validate only)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseDraft: true
-          prerelease: false
           projectPath: apps/desktop
-          # Only publish on tag pushes; on branch/PR this step still validates the build
-          # without uploading release assets (tauri-action skips upload when tagName
-          # doesn't resolve to a tag event).
+          # No tagName/releaseDraft here — this job just validates that the
+          # cross-platform build compiles. release.yml handles tag-driven
+          # publication.
