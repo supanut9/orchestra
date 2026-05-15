@@ -43,14 +43,61 @@ export type ProviderConfig =
   | OllamaConfig
   | OpenRouterConfig;
 
+/** Default model IDs per provider — the recommended starting model. */
 export const defaultModels: Record<ProviderId, string> = {
-  anthropic: 'claude-sonnet-4-5',
+  anthropic: 'claude-sonnet-4-7',
   openai: 'gpt-4o',
-  google: 'gemini-2.0-flash',
+  google: 'gemini-2.5-pro',
   ollama: 'llama3.2',
-  openrouter: 'anthropic/claude-sonnet-4-5',
+  openrouter: 'anthropic/claude-sonnet-4-7',
 };
 
+/** Recommended model lists per provider (UI picker). */
+export const providerModels: Record<ProviderId, string[]> = {
+  anthropic: [
+    'claude-opus-4-5',
+    'claude-sonnet-4-7',
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'claude-3-5-haiku-20241022',
+  ],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'],
+  google: [
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+  ],
+  ollama: ['llama3.2', 'llama3.1', 'llama3', 'mistral', 'codellama', 'qwen2.5-coder'],
+  openrouter: [
+    'anthropic/claude-sonnet-4-7',
+    'openai/gpt-4o',
+    'google/gemini-2.5-pro',
+    'meta-llama/llama-3.3-70b-instruct',
+    'mistralai/mistral-large',
+  ],
+};
+
+export interface ProviderInfo {
+  id: ProviderId;
+  name: string;
+  supportsTools: boolean;
+  supportsStreaming: boolean;
+}
+
+/** List all supported providers with capability flags. */
+export function listAvailableProviders(): ProviderInfo[] {
+  return [
+    { id: 'anthropic', name: 'Anthropic', supportsTools: true, supportsStreaming: true },
+    { id: 'openai', name: 'OpenAI', supportsTools: true, supportsStreaming: true },
+    { id: 'google', name: 'Google Gemini', supportsTools: true, supportsStreaming: true },
+    { id: 'ollama', name: 'Ollama (local)', supportsTools: false, supportsStreaming: true },
+    { id: 'openrouter', name: 'OpenRouter', supportsTools: true, supportsStreaming: true },
+  ];
+}
+
+/** Instantiate a Vercel AI SDK LanguageModel for the given config. */
 export function createProvider(config: ProviderConfig): LanguageModel {
   switch (config.providerId) {
     case 'anthropic': {
@@ -78,6 +125,10 @@ export function createProvider(config: ProviderConfig): LanguageModel {
         name: 'openrouter',
         baseURL: 'https://openrouter.ai/api/v1',
         apiKey: config.apiKey,
+        headers: {
+          'HTTP-Referer': 'https://orchestra-ide.dev',
+          'X-Title': 'Orchestra IDE',
+        },
       });
       return provider(config.model ?? defaultModels.openrouter);
     }

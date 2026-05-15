@@ -5,9 +5,7 @@ pub mod memory;
 pub mod pty;
 pub mod services;
 
-/// Application entry point called from main.rs.
 pub fn run() {
-    // Initialise structured logging. RUST_LOG env var controls verbosity.
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -16,38 +14,37 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
-        // ── Plugins ──────────────────────────────────────────────────────
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        // ── IPC commands ─────────────────────────────────────────────────
+        .manage(fs::FsState::new())
+        .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
-            // Workspace
-            ipc::open_workspace,
-            // File system
-            ipc::list_files,
-            ipc::read_file,
-            ipc::write_file,
-            // Services
-            ipc::parse_services,
-            ipc::start_service,
-            ipc::stop_service,
-            // PTY
-            ipc::pty_spawn,
-            ipc::pty_write,
-            ipc::pty_resize,
-            ipc::pty_kill,
-            ipc::pty_claim,
-            ipc::pty_attach,
-            // Git
+            // File system (Lane A)
+            fs::commands::fs_open_workspace,
+            fs::commands::fs_list_files,
+            fs::commands::fs_read_file,
+            fs::commands::fs_write_file,
+            fs::commands::fs_start_watching,
+            fs::commands::fs_stop_watching,
+            // PTY (Lane B)
+            pty::commands::pty_spawn,
+            pty::commands::pty_write,
+            pty::commands::pty_resize,
+            pty::commands::pty_kill,
+            pty::commands::pty_claim,
+            pty::commands::pty_list,
+            // Services (Lane B)
+            services::commands::services_detect,
+            services::commands::services_run_all,
+            services::commands::services_run_one,
+            // Git, Memory, Lanes (Sprint 2 stubs)
             ipc::git_status,
             ipc::git_worktree_add,
             ipc::git_worktree_remove,
-            // Memory
             ipc::memory_query,
             ipc::memory_insert,
-            // Lanes
             ipc::list_lanes,
         ])
         .run(tauri::generate_context!())

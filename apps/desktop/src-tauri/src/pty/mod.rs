@@ -1,26 +1,24 @@
-#![allow(dead_code)]
-//! PTY manager — Lane B implementation target.
-//!
-//! TODO Lane B: implement a `PtyManager` using `portable-pty` that:
-//!   - Maintains a `DashMap<PtyId, PtyHandle>`
-//!   - Streams output bytes over a Tauri "raw payload" channel (avoiding JSON
-//!     encoding overhead on hot terminal data)
-//!   - Tracks ownership (`PtyOwner::User` | `PtyOwner::Agent { session_id }`)
-//!   - Supports `attach` for multiple read-only subscribers (UI tabs + agent)
-//!   - Emits `pty.output` and `pty.status` Tauri events
+// PTY module — Lane B implementation.
+//
+// Provides a portable, cross-platform PTY manager built on Wezterm's
+// `portable-pty` crate. Each spawned PTY is identified by a UUID string,
+// tracked in a `DashMap`, and streams its output to the Tauri event bus as
+// base64-encoded chunks on the `pty.output` topic.
 
-/// Opaque PTY identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PtyId(pub String);
+pub mod commands;
+pub mod manager;
 
-impl PtyId {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
-}
+pub use manager::PtyManager;
 
-impl std::fmt::Display for PtyId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+use std::sync::{Arc, Mutex};
+
+/// Tauri managed state that wraps the PTY manager behind an `Arc<Mutex<…>>`.
+///
+/// Registered via `tauri::Builder::manage(PtyState::default())` in `lib.rs`.
+pub struct PtyState(pub Arc<Mutex<PtyManager>>);
+
+impl Default for PtyState {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(PtyManager::new())))
     }
 }

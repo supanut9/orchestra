@@ -42,7 +42,9 @@
     "class-variance-authority": "^0.7.1",
     "tailwind-merge": "^2.5.0",
     "lucide-react": "^0.469.0",
-    "nanoid": "^5.0.9"
+    "nanoid": "^5.0.9",
+    "@orchestra/ai-runtime": "workspace:*",
+    "@orchestra/memory": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

@@ -21,8 +21,7 @@
     "verbatimModuleSyntax": true,
     "useDefineForClassFields": true,
     "allowJs": false,
-    "checkJs": false,
-    "incremental": true
+    "checkJs": false
   },
   "exclude": ["node_modules", "dist", "build", "target", ".next", ".turbo"]
 }

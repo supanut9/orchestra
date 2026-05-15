@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./stream": {
+      "import": "./dist/stream.js",
+      "types": "./dist/stream.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -29,7 +33,7 @@
     "@ai-sdk/anthropic": "catalog:",
     "@ai-sdk/openai": "catalog:",
     "@ai-sdk/google": "catalog:",
-    "@ai-sdk/openai-compatible": "^0.1.0",
+    "@ai-sdk/openai-compatible": "^0.2.0",
     "zod": "catalog:",
     "@langchain/langgraph": "^0.2.50",
     "nanoid": "^5.0.9"

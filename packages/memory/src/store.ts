@@ -5,9 +5,17 @@ import { NullEmbedder } from './embeddings.js';
 import { MIGRATIONS, createVecTableSQL } from './migrations.js';
 
 export interface QueryOptions {
-  text: string;
+  text?: string;
   topK?: number;
   scope?: Scope;
+}
+
+export interface NewMemoryRecord {
+  scope: Scope;
+  kind: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  embedding?: number[];
 }
 
 /**
@@ -22,6 +30,8 @@ export class MemoryStore {
   private readonly embedder: Embedder;
 
   private db: any | null = null;
+  /** Whether the sqlite-vec extension was successfully loaded. */
+  private vecAvailable = false;
 
   constructor(dbPath: string, embedder?: Embedder) {
     this.dbPath = dbPath;
@@ -29,8 +39,9 @@ export class MemoryStore {
   }
 
   /**
-   * Open the database, load sqlite-vec extension, and run migrations.
+   * Open the database, attempt to load sqlite-vec extension, and run migrations.
    * Idempotent — safe to call multiple times.
+   * If sqlite-vec is unavailable the store still works without semantic search.
    */
   async init(): Promise<void> {
     if (this.db) return;
@@ -39,15 +50,33 @@ export class MemoryStore {
     // at import time; tests can mock this path.
     const Database = (await import('better-sqlite3')).default;
 
-    const sqliteVec = (await import('sqlite-vec')) as any;
-
     this.db = new Database(this.dbPath);
-    sqliteVec.load(this.db);
+
+    // Attempt to load sqlite-vec; degrade gracefully if unavailable.
+    try {
+      const sqliteVec = (await import('sqlite-vec')) as any;
+      sqliteVec.load(this.db);
+      this.vecAvailable = true;
+    } catch (err) {
+      console.warn(
+        '[MemoryStore] sqlite-vec extension not available — semantic search disabled.',
+        err instanceof Error ? err.message : err,
+      );
+      this.vecAvailable = false;
+    }
 
     for (const sql of MIGRATIONS) {
       this.db.exec(sql);
     }
-    this.db.exec(createVecTableSQL(this.embedder.dimensions));
+
+    if (this.vecAvailable) {
+      try {
+        this.db.exec(createVecTableSQL(this.embedder.dimensions));
+      } catch (err) {
+        console.warn('[MemoryStore] Could not create vec_memory table:', err);
+        this.vecAvailable = false;
+      }
+    }
   }
 
   private assertInit(): void {
@@ -57,19 +86,18 @@ export class MemoryStore {
   }
 
   /** Insert a new memory record. Returns the stored record with generated id/timestamps. */
-  async insert(
-    record: Omit<MemoryRecord, 'id' | 'createdAt' | 'updatedAt'>,
-  ): Promise<MemoryRecord> {
+  async insert(record: NewMemoryRecord): Promise<MemoryRecord> {
     this.assertInit();
     const now = new Date();
     const full: MemoryRecord = {
-      ...record,
+      scope: record.scope,
+      kind: record.kind,
+      content: record.content,
+      metadata: record.metadata ?? {},
       id: nanoid(),
       createdAt: now,
       updatedAt: now,
     };
-
-    const embedding = record.embedding ?? (await this.embedder.embed(record.content));
 
     this.db
       .prepare(
@@ -86,76 +114,93 @@ export class MemoryStore {
         full.updatedAt.toISOString(),
       );
 
-    this.db
-      .prepare(`INSERT INTO vec_memory (id, embedding) VALUES (?, ?)`)
-      .run(full.id, new Float32Array(embedding));
+    if (this.vecAvailable) {
+      try {
+        const embedding = record.embedding ?? (await this.embedder.embed(record.content));
+        this.db
+          .prepare(`INSERT INTO vec_memory (id, embedding) VALUES (?, ?)`)
+          .run(full.id, new Float32Array(embedding));
+        return { ...full, embedding };
+      } catch (err) {
+        console.warn('[MemoryStore] Failed to insert embedding:', err);
+      }
+    }
 
-    return { ...full, embedding };
+    return full;
   }
 
   /**
    * Semantic + keyword query.
-   * Stub: in Sprint 1 this will use sqlite-vec ANN search.
+   * Uses vec ANN search when sqlite-vec is available and text is provided.
+   * Falls back to LIKE %text% on content column.
    */
   async query(opts: QueryOptions): Promise<MemoryRecord[]> {
     this.assertInit();
     const topK = opts.topK ?? 10;
 
-    let sql = `SELECT * FROM memory_records`;
+    // If vec is available and we have a search text, try ANN.
+    if (this.vecAvailable && opts.text) {
+      try {
+        const queryVec = await this.embedder.embed(opts.text);
+        let sql = `
+          SELECT mr.*
+          FROM memory_records mr
+          INNER JOIN (
+            SELECT id, distance
+            FROM vec_memory
+            WHERE embedding MATCH ?
+            ORDER BY distance
+            LIMIT ?
+          ) vm ON mr.id = vm.id
+        `;
+        const params: unknown[] = [new Float32Array(queryVec), topK];
+
+        if (opts.scope) {
+          sql = `
+            SELECT mr.*
+            FROM memory_records mr
+            INNER JOIN (
+              SELECT id, distance
+              FROM vec_memory
+              WHERE embedding MATCH ?
+              ORDER BY distance
+              LIMIT ?
+            ) vm ON mr.id = vm.id
+            WHERE mr.scope = ?
+          `;
+          params.push(opts.scope);
+        }
+
+        const rows: any[] = this.db.prepare(sql).all(...params);
+        return rows.map(rowToRecord);
+      } catch (err) {
+        console.warn('[MemoryStore] Vec ANN query failed, falling back to LIKE search:', err);
+      }
+    }
+
+    // Keyword / scope fallback
+    const conditions: string[] = [];
     const params: unknown[] = [];
 
     if (opts.scope) {
-      sql += ` WHERE scope = ?`;
+      conditions.push('scope = ?');
       params.push(opts.scope);
     }
 
-    sql += ` ORDER BY updated_at DESC LIMIT ?`;
+    if (opts.text) {
+      conditions.push('content LIKE ?');
+      params.push(`%${opts.text}%`);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const sql = `SELECT * FROM memory_records ${where} ORDER BY updated_at DESC LIMIT ?`;
     params.push(topK);
 
     const rows: any[] = this.db.prepare(sql).all(...params);
     return rows.map(rowToRecord);
   }
 
-  /** Patch an existing record by id. */
-  async update(id: string, patch: MemoryRecordPatch): Promise<void> {
-    this.assertInit();
-    const existing: MemoryRecord | undefined = this.db
-      .prepare(`SELECT * FROM memory_records WHERE id = ?`)
-      .get(id);
-
-    if (!existing) throw new Error(`MemoryRecord not found: ${id}`);
-
-    const now = new Date();
-    const content = patch.content ?? existing.content;
-    const kind = patch.kind ?? existing.kind;
-    const metadata = patch.metadata ?? JSON.parse(existing.metadata as unknown as string);
-
-    this.db
-      .prepare(
-        `UPDATE memory_records SET kind = ?, content = ?, metadata = ?, updated_at = ? WHERE id = ?`,
-      )
-      .run(kind, content, JSON.stringify(metadata), now.toISOString(), id);
-
-    if (patch.embedding) {
-      this.db
-        .prepare(`UPDATE vec_memory SET embedding = ? WHERE id = ?`)
-        .run(new Float32Array(patch.embedding), id);
-    } else if (patch.content) {
-      const newEmbedding = await this.embedder.embed(content);
-      this.db
-        .prepare(`UPDATE vec_memory SET embedding = ? WHERE id = ?`)
-        .run(new Float32Array(newEmbedding), id);
-    }
-  }
-
-  /** Delete a record by id. */
-  async delete(id: string): Promise<void> {
-    this.assertInit();
-    this.db.prepare(`DELETE FROM vec_memory WHERE id = ?`).run(id);
-    this.db.prepare(`DELETE FROM memory_records WHERE id = ?`).run(id);
-  }
-
-  /** List all records for a scope. */
+  /** List all records for a scope, newest first. */
   async list(scope: Scope): Promise<MemoryRecord[]> {
     this.assertInit();
 
@@ -163,6 +208,67 @@ export class MemoryStore {
       .prepare(`SELECT * FROM memory_records WHERE scope = ? ORDER BY updated_at DESC`)
       .all(scope);
     return rows.map(rowToRecord);
+  }
+
+  /** Patch an existing record by id. Returns the updated record. */
+  async update(id: string, patch: MemoryRecordPatch): Promise<MemoryRecord> {
+    this.assertInit();
+    const existingRow: any = this.db.prepare(`SELECT * FROM memory_records WHERE id = ?`).get(id);
+
+    if (!existingRow) throw new Error(`MemoryRecord not found: ${id}`);
+
+    const existing = rowToRecord(existingRow);
+    const now = new Date();
+    const content = patch.content ?? existing.content;
+    const kind = patch.kind ?? existing.kind;
+    const metadata = patch.metadata ?? existing.metadata;
+
+    this.db
+      .prepare(
+        `UPDATE memory_records SET kind = ?, content = ?, metadata = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(kind, content, JSON.stringify(metadata), now.toISOString(), id);
+
+    if (this.vecAvailable) {
+      try {
+        if (patch.embedding) {
+          this.db
+            .prepare(`UPDATE vec_memory SET embedding = ? WHERE id = ?`)
+            .run(new Float32Array(patch.embedding), id);
+        } else if (patch.content) {
+          const newEmbedding = await this.embedder.embed(content);
+          this.db
+            .prepare(`UPDATE vec_memory SET embedding = ? WHERE id = ?`)
+            .run(new Float32Array(newEmbedding), id);
+        }
+      } catch (err) {
+        console.warn('[MemoryStore] Failed to update embedding:', err);
+      }
+    }
+
+    return { ...existing, kind, content, metadata, updatedAt: now };
+  }
+
+  /** Delete a record by id. */
+  async delete(id: string): Promise<void> {
+    this.assertInit();
+    if (this.vecAvailable) {
+      try {
+        this.db.prepare(`DELETE FROM vec_memory WHERE id = ?`).run(id);
+      } catch {
+        // vec table may not have the record; ignore
+      }
+    }
+    this.db.prepare(`DELETE FROM memory_records WHERE id = ?`).run(id);
+  }
+
+  /** Close the database connection. Safe to call multiple times. */
+  async close(): Promise<void> {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+      this.vecAvailable = false;
+    }
   }
 }
 

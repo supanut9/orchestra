@@ -30,10 +30,22 @@ export class AgentSession {
   }
 
   /**
-   * Run a single user turn. Streams text from the configured provider.
-   * Returns the full assistant response text.
+   * Run a single user turn, collecting the full streamed response.
+   * Returns the complete assistant response text.
    */
   async run(prompt: string): Promise<string> {
+    let fullText = '';
+    await this.stream(prompt, (chunk) => {
+      fullText += chunk;
+    });
+    return fullText;
+  }
+
+  /**
+   * Stream a single user turn, calling onChunk for each text delta.
+   * Persists both the user and assistant messages into the history.
+   */
+  async stream(prompt: string, onChunk: (text: string) => void): Promise<void> {
     const userMessage: Message = {
       id: nanoid(),
       role: 'user',
@@ -47,7 +59,7 @@ export class AgentSession {
       content: m.content,
     }));
 
-    const result = await streamText({
+    const result = streamText({
       model: this.provider,
       system: this.systemPrompt,
       messages: aiMessages,
@@ -56,6 +68,7 @@ export class AgentSession {
     let fullText = '';
     for await (const chunk of result.textStream) {
       fullText += chunk;
+      onChunk(chunk);
     }
 
     const assistantMessage: Message = {
@@ -69,12 +82,15 @@ export class AgentSession {
     if (this.onMemory) {
       await this.onMemory(this.messages);
     }
-
-    return fullText;
   }
 
-  /** Reset the conversation history. */
-  reset(): void {
+  /** Clear all conversation history without destroying the session. */
+  clear(): void {
     this.messages = [];
+  }
+
+  /** Alias kept for backwards compatibility. */
+  reset(): void {
+    this.clear();
   }
 }
