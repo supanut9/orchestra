@@ -25,7 +25,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.10.0",
     "sqlite-vec": "^0.1.6",
     "zod": "catalog:",
     "nanoid": "^5.0.9"
