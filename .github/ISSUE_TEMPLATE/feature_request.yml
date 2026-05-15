@@ -1,0 +1,50 @@
+name: Feature Request
+description: Propose a new feature or enhancement.
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please check [GitHub Discussions](https://github.com/placeholder/orchestra/discussions) and open issues to see if this has already been proposed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve? Frame it from your workflow perspective — not just "add feature X" but "I can't do Y because Z".
+      placeholder: |
+        When I have 4 microservices running, I have no way to see at a glance which one is consuming the most CPU without switching terminals manually.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe your ideal solution. Include UI sketches, API shapes, or workflow descriptions as needed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you think about, and why did you reject them?
+
+  - type: textarea
+    id: beneficiaries
+    attributes:
+      label: Who benefits
+      description: |
+        Who else would benefit from this feature? Helps us prioritise.
+        Examples: "solo devs running monorepos", "teams using Ollama on-prem", "non-coders orchestrating agents".
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Links, prior art in other tools, mockups, etc.

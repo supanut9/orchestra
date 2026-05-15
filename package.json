@@ -1,0 +1,38 @@
+{
+  "name": "orchestra",
+  "version": "0.0.0",
+  "private": true,
+  "description": "An open-source AI-native desktop IDE for the multi-agent, multi-service era.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @orchestra/desktop dev",
+    "build": "pnpm -r build",
+    "tauri": "pnpm --filter @orchestra/desktop tauri",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "clean": "pnpm -r clean && rimraf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+target
+.next
+.turbo
+pnpm-lock.yaml
+Cargo.lock
+*.min.js
+*.min.css

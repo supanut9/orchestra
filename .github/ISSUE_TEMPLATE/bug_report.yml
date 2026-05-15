@@ -1,0 +1,96 @@
+name: Bug Report
+description: Something is broken or behaves unexpectedly.
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug. Please fill in as much detail as possible so we can reproduce and fix it quickly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to consistently reproduce the issue.
+      placeholder: |
+        1. Open a project folder
+        2. Click "New Lane"
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What actually happened? Include error messages and stack traces if available.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Ubuntu / Debian
+        - Fedora / RHEL
+        - Other Linux
+        - Windows 11
+        - Windows 10
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Orchestra version
+      description: Found in Orchestra → About, or run `orchestra --version`.
+      placeholder: '0.1.0'
+    validations:
+      required: true
+
+  - type: input
+    id: node_version
+    attributes:
+      label: Node.js version
+      placeholder: '22.x'
+
+  - type: input
+    id: rust_version
+    attributes:
+      label: Rust version (if building from source)
+      placeholder: '1.78.0'
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / screen recording
+      description: Drag and drop images or a video here if helpful.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Anything else that might help? (related issues, recent changes, network conditions, etc.)

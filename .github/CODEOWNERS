@@ -1,0 +1,9 @@
+# CODEOWNERS — assign default reviewers to changed files.
+#
+# TODO: Replace <placeholder> with the GitHub org/username once the repository
+#       is hosted under a real account or organisation.
+#
+# Format:  <pattern>  <owner> [<owner> ...]
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @<placeholder>

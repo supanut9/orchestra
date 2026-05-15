@@ -1,0 +1,43 @@
+{
+  "name": "@orchestra/memory",
+  "version": "0.0.0",
+  "description": "Local-first memory store on SQLite + sqlite-vec",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "sqlite-vec": "^0.1.6",
+    "zod": "catalog:",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "tsup": "^8.3.5",
+    "vitest": "^2.1.8",
+    "eslint": "^9.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "rimraf": "^6.0.1",
+    "@types/better-sqlite3": "^7.6.12"
+  }
+}

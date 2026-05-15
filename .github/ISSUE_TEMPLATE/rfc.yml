@@ -1,0 +1,76 @@
+name: RFC (Request for Comments)
+description: Propose a significant design change that affects the architecture, public API, or cross-cutting concerns.
+labels:
+  - rfc
+  - needs-discussion
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RFCs are for changes that are **large in scope**, affect **multiple components**, or introduce **new architectural patterns**. For small features or bug fixes, please use the Feature Request or Bug Report template instead.
+
+        An RFC does not guarantee the proposal will be accepted, but it ensures important decisions are discussed openly and recorded.
+
+  - type: input
+    id: title
+    attributes:
+      label: RFC title
+      description: Short noun-phrase that names the proposal.
+      placeholder: 'Unified PTY ownership protocol across Lane B and Lane C'
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: |
+        Why are we doing this? What pain does it solve?
+        Cite concrete user scenarios or metrics where possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: design
+    attributes:
+      label: Detailed design
+      description: |
+        This is the bulk of the RFC. Explain the design in enough detail that a contributor could implement it. Include:
+        - Data structures, type signatures, API shapes
+        - Interaction diagrams or ASCII art as needed
+        - How existing features are affected
+    validations:
+      required: true
+
+  - type: textarea
+    id: drawbacks
+    attributes:
+      label: Drawbacks
+      description: |
+        Why should we NOT do this? Be honest about complexity, maintenance burden, performance costs, migration risk, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: What other designs were considered? Why were they rejected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior_art
+    attributes:
+      label: Prior art
+      description: |
+        How have others solved this problem? Reference OSS projects, academic papers, blog posts, or previous Orchestra issues.
+
+  - type: textarea
+    id: unresolved
+    attributes:
+      label: Unresolved questions
+      description: |
+        What parts of the design are still undecided? List them explicitly so reviewers know where input is most needed.
+    validations:
+      required: true
