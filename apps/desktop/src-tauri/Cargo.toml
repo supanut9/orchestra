@@ -35,7 +35,7 @@ tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 portable-pty  = "^0.8"
 
 # File watching
-notify = "^7"
+notify = "^8"
 
 # Git worktree management
 git2 = "^0.19"
