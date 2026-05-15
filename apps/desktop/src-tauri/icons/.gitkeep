@@ -1,0 +1,6 @@
+# Icon placeholder
+# Tauri requires real icon files at build time (icon.png, icon.icns, icon.ico).
+# Drop your icons here before running `pnpm tauri build`.
+# For dev, `pnpm tauri dev` does NOT require icons.
+# Quick way to generate from a single PNG:
+#   npx @tauri-apps/cli icon path/to/app-icon.png
