@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSettingsStore, DEFAULT_CLI_PATHS } from '@/stores/settings';
 import type {
   ProviderId,
@@ -7,6 +7,12 @@ import type {
   CliProviderConfig,
 } from '@/stores/settings';
 import { testProviderConnection } from '@/lib/ai/provider-registry';
+import { detectBinary } from '@/lib/ipc/system';
+
+/** Strip the `-cli` suffix → "claude-cli" → "claude". */
+function cliBinaryName(id: CliProviderId): string {
+  return id.replace(/-cli$/, '');
+}
 
 // ── Provider metadata ──────────────────────────────────────────────────────
 
@@ -121,8 +127,11 @@ function ProviderRow({ meta }: ProviderRowProps) {
 
   const saved = providers[meta.id];
 
-  const cliDefault = meta.isCli && isCliId(meta.id) ? DEFAULT_CLI_PATHS[meta.id][0] ?? meta.id.replace('-cli', '') : '';
+  const cliDefault =
+    meta.isCli && isCliId(meta.id) ? (DEFAULT_CLI_PATHS[meta.id][0] ?? meta.id.replace('-cli', '')) : '';
 
+  const [detecting, setDetecting] = useState(false);
+  const [detectStatus, setDetectStatus] = useState<'idle' | 'found' | 'not-found'>('idle');
   const [apiKey, setApiKey] = useState<string>((saved as any)?.apiKey ?? '');
   const [baseUrl, setBaseUrl] = useState<string>(
     (saved as any)?.baseUrl ?? meta.defaultBaseUrl ?? '',
@@ -136,6 +145,45 @@ function ProviderRow({ meta }: ProviderRowProps) {
   const [dirty, setDirty] = useState(false);
 
   const isActive = activeProviderId === meta.id;
+
+  // Auto-detect CLI binary on first mount if no path is saved.
+  useEffect(() => {
+    if (!meta.isCli || !isCliId(meta.id) || saved) return;
+    setDetecting(true);
+    detectBinary(cliBinaryName(meta.id))
+      .then((found) => {
+        if (found) {
+          setBinaryPath(found);
+          setDetectStatus('found');
+        } else {
+          setDetectStatus('not-found');
+        }
+      })
+      .catch(() => setDetectStatus('not-found'))
+      .finally(() => setDetecting(false));
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleDetect() {
+    if (!isCliId(meta.id)) return;
+    setDetecting(true);
+    setDetectStatus('idle');
+    try {
+      const found = await detectBinary(cliBinaryName(meta.id));
+      if (found) {
+        setBinaryPath(found);
+        setDetectStatus('found');
+        setDirty(true);
+      } else {
+        setDetectStatus('not-found');
+      }
+    } catch {
+      setDetectStatus('not-found');
+    } finally {
+      setDetecting(false);
+    }
+  }
 
   function buildConfig(): ProviderConfig {
     if (meta.isCli && isCliId(meta.id)) {
@@ -257,17 +305,37 @@ function ProviderRow({ meta }: ProviderRowProps) {
               (uses the CLI&apos;s own auth — no API key needed)
             </span>
           </label>
-          <input
-            type="text"
-            value={binaryPath}
-            placeholder={cliDefault}
-            onChange={(e) => {
-              setBinaryPath(e.target.value);
-              setDirty(true);
-              setTestStatus('idle');
-            }}
-            className="w-full rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm font-mono placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={binaryPath}
+              placeholder={detecting ? 'Detecting…' : cliDefault}
+              onChange={(e) => {
+                setBinaryPath(e.target.value);
+                setDirty(true);
+                setTestStatus('idle');
+                setDetectStatus('idle');
+              }}
+              className="flex-1 rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm font-mono placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+            />
+            <button
+              type="button"
+              onClick={() => void handleDetect()}
+              disabled={detecting}
+              className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 py-1.5 text-xs hover:bg-[hsl(var(--muted))]/80 disabled:opacity-50"
+              title="Run `which` via the user's login shell to find the CLI"
+            >
+              {detecting ? '…' : 'Detect'}
+            </button>
+          </div>
+          {detectStatus === 'found' && (
+            <p className="text-[10px] text-green-400">✓ Found via login shell.</p>
+          )}
+          {detectStatus === 'not-found' && (
+            <p className="text-[10px] text-yellow-400">
+              Not found on PATH. Install with the official instructions, then click Detect.
+            </p>
+          )}
         </div>
       )}
 

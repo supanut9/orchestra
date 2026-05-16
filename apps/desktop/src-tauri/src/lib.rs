@@ -5,6 +5,7 @@ pub mod mcp;
 pub mod memory;
 pub mod pty;
 pub mod services;
+pub mod system;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -63,6 +64,8 @@ pub fn run() {
             mcp::commands::mcp_start,
             mcp::commands::mcp_stop,
             mcp::commands::mcp_status,
+            // System helpers
+            system::commands::detect_binary,
             // Lanes (Sprint 4 stub)
             ipc::list_lanes,
         ])

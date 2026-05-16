@@ -26,3 +26,6 @@ export * from './memory';
 
 // Lane H — MCP server lifecycle (Sprint 3).
 export * from './mcp';
+
+// System helpers (binary detection etc.)
+export * from './system';
