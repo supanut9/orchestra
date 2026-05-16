@@ -181,7 +181,17 @@ export function ServiceDashboard() {
   // Per-row loading state
   const [rowLoading, setRowLoading] = useState<Set<string>>(new Set());
 
+  // Transient success banner — set by Run All / Run One, cleared after 4 s.
+  const [toast, setToast] = useState<string | null>(null);
+  const [runAllPending, setRunAllPending] = useState(false);
+
   const unlistenRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // ── Detect services ────────────────────────────────────────────────────────
 
@@ -246,7 +256,7 @@ export function ServiceDashboard() {
   const handleRunAll = useCallback(async () => {
     if (!workspace?.folders[0]?.path) return;
 
-    setLoading(true);
+    setRunAllPending(true);
     setError(null);
     try {
       const ids = await servicesRunAll(workspace.folders[0]!.path);
@@ -262,10 +272,11 @@ export function ServiceDashboard() {
       });
       setServiceMap(newMap);
       setSpawnedIds(ids);
+      setToast(`Started ${ids.length} service${ids.length === 1 ? '' : 's'}`);
     } catch (err) {
       setError(String(err));
     } finally {
-      setLoading(false);
+      setRunAllPending(false);
     }
   }, [workspace?.folders[0]?.path, services, serviceMap]);
 
@@ -375,11 +386,15 @@ export function ServiceDashboard() {
           {services.length > 0 && (
             <button
               onClick={handleRunAll}
-              disabled={loading}
+              disabled={loading || runAllPending}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-green-700 hover:bg-green-600 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Zap size={12} />
-              Run All
+              {runAllPending ? (
+                <RefreshCw size={12} className="animate-spin" />
+              ) : (
+                <Zap size={12} />
+              )}
+              {runAllPending ? 'Starting…' : 'Run All'}
             </button>
           )}
         </div>
@@ -392,6 +407,13 @@ export function ServiceDashboard() {
           <button onClick={() => setError(null)} className="ml-2 underline">
             dismiss
           </button>
+        </div>
+      )}
+
+      {/* Success toast */}
+      {toast && (
+        <div className="px-4 py-2 text-xs bg-green-950 text-green-300 border-b border-green-900">
+          {toast}
         </div>
       )}
 
