@@ -35,6 +35,8 @@ const SOURCE_LABELS: Record<ServiceSource, string> = {
   dockerCompose: 'compose',
   procfile: 'procfile',
   packageJsonScript: 'pkg.json',
+  makefile: 'makefile',
+  goModule: 'go.mod',
 };
 
 const SOURCE_COLOURS: Record<ServiceSource, string> = {
@@ -42,6 +44,8 @@ const SOURCE_COLOURS: Record<ServiceSource, string> = {
   dockerCompose: 'bg-blue-900/60 text-blue-300',
   procfile: 'bg-green-900/60 text-green-300',
   packageJsonScript: 'bg-amber-900/60 text-amber-300',
+  makefile: 'bg-pink-900/60 text-pink-300',
+  goModule: 'bg-cyan-900/60 text-cyan-300',
 };
 
 function SourceBadge({ source }: { source: ServiceSource }) {

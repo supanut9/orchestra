@@ -14,7 +14,13 @@ import { invoke } from '@tauri-apps/api/core';
  * Indicates which configuration file a service was discovered from.
  * Mirrors the Rust `ServiceSource` enum.
  */
-export type ServiceSource = 'dockerCompose' | 'procfile' | 'packageJsonScript' | 'orchestraYaml';
+export type ServiceSource =
+  | 'dockerCompose'
+  | 'procfile'
+  | 'packageJsonScript'
+  | 'orchestraYaml'
+  | 'makefile'
+  | 'goModule';
 
 /**
  * A single runnable service as returned by the Rust service parser.

@@ -5,6 +5,8 @@
 //   2. `docker-compose.yml`    — or `docker-compose.yaml` / `compose.yml` / `compose.yaml`
 //   3. `Procfile`              — Heroku-style process manifest
 //   4. `package.json` scripts  — dev / start / serve / dev:* / serve:*
+//   5. `Makefile` targets      — run / dev / serve / start / watch / air / run:* / dev:*
+//   6. `go.mod` + `main.go`    — single Go binary at the repo root → `go run .`
 //
 // Each discovered service maps to a `DetectedService` which the command layer
 // turns into a PTY spawn request.
@@ -27,6 +29,8 @@ pub enum ServiceSource {
     Procfile,
     PackageJsonScript,
     OrchestraYaml,
+    Makefile,
+    GoModule,
 }
 
 // ── DetectedService ───────────────────────────────────────────────────────────
@@ -99,6 +103,31 @@ pub fn detect_services(workspace_path: &Path) -> Vec<DetectedService> {
     let package_json = workspace_path.join("package.json");
     if package_json.exists() {
         add_services(parse_package_json_scripts(&package_json, workspace_path));
+    }
+
+    // 5. Makefile targets (run / dev / serve / start / watch / air / run:* / dev:*)
+    for makefile in &["Makefile", "makefile", "GNUmakefile"] {
+        let path = workspace_path.join(makefile);
+        if path.exists() {
+            add_services(parse_makefile(&path, workspace_path));
+            break;
+        }
+    }
+
+    // 6. `go.mod` + `main.go` at the repo root → a single `go run .` service.
+    if workspace_path.join("go.mod").exists() && workspace_path.join("main.go").exists() {
+        let name = workspace_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("go-service")
+            .to_string();
+        add_services(vec![DetectedService {
+            name,
+            source: ServiceSource::GoModule,
+            command: vec!["go".to_string(), "run".to_string(), ".".to_string()],
+            cwd: workspace_path.to_path_buf(),
+            env: HashMap::new(),
+        }]);
     }
 
     results
@@ -342,6 +371,105 @@ fn parse_package_json_scripts(path: &Path, workspace_root: &Path) -> Vec<Detecte
             env: HashMap::new(),
         })
         .collect()
+}
+
+// ── Makefile parser ───────────────────────────────────────────────────────────
+
+/// Allowlist of Makefile target names treated as runnable services.
+/// Matches: `run`, `dev`, `serve`, `start`, `watch`, `air`, plus anything
+/// beginning with `run:`, `dev:`, `serve:`, `start:` (e.g. `dev-api`,
+/// `run.web`).
+fn is_service_target(name: &str) -> bool {
+    let bare = matches!(name, "run" | "dev" | "serve" | "start" | "watch" | "air");
+    if bare {
+        return true;
+    }
+    let prefixes = ["run:", "dev:", "serve:", "start:", "run-", "dev-", "serve-", "start-"];
+    prefixes.iter().any(|p| name.starts_with(p))
+}
+
+/// Parse a Makefile and return a `DetectedService` for each matching target.
+///
+/// The detector is intentionally simple: it scans top-of-line `<name>:` patterns
+/// (real target declarations) and skips:
+///   - lines beginning with whitespace (recipe bodies)
+///   - lines beginning with `#` (comments)
+///   - PHONY/variable declarations (`.PHONY:`, `name = value`)
+///   - pattern rules (`%`) and double-colon rules (handled by `find(':')`)
+///   - targets containing `/`, `$`, or backslash (typically file paths)
+///
+/// Commands are always emitted as `make <target>`.
+fn parse_makefile(path: &Path, workspace_root: &Path) -> Vec<DetectedService> {
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to read Makefile: {e}");
+            return vec![];
+        }
+    };
+
+    let mut services = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        // Skip indented lines (recipe bodies) and comments and blank lines.
+        if line.starts_with('\t') || line.starts_with(' ') {
+            continue;
+        }
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Variable assignments like `NAME = value` or `NAME := value` are not targets.
+        if let Some(eq_idx) = trimmed.find('=') {
+            if let Some(colon_idx) = trimmed.find(':') {
+                if eq_idx < colon_idx || trimmed.as_bytes().get(colon_idx + 1) == Some(&b'=') {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        }
+
+        // Target declaration: `<name>:` or `<name>: <prerequisites>`.
+        let Some(colon_idx) = trimmed.find(':') else {
+            continue;
+        };
+        let name_part = trimmed[..colon_idx].trim();
+        if name_part.is_empty() {
+            continue;
+        }
+
+        // Skip special / pattern / multi-target rules.
+        if name_part.starts_with('.')
+            || name_part.contains(' ')
+            || name_part.contains('%')
+            || name_part.contains('/')
+            || name_part.contains('$')
+            || name_part.contains('\\')
+        {
+            continue;
+        }
+
+        if !is_service_target(name_part) {
+            continue;
+        }
+
+        if !seen.insert(name_part.to_string()) {
+            continue;
+        }
+
+        services.push(DetectedService {
+            name: name_part.to_string(),
+            source: ServiceSource::Makefile,
+            command: vec!["make".to_string(), name_part.to_string()],
+            cwd: workspace_root.to_path_buf(),
+            env: HashMap::new(),
+        });
+    }
+
+    services
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
