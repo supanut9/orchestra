@@ -1,65 +1,35 @@
 /**
  * memory-bridge.ts
  *
- * Manages a single MemoryStore instance per workspace path.
- * The store is opened lazily on first access and re-opened when the workspace changes.
+ * Thin shim that adapts the agent chat flow to the Rust-backed memory IPC
+ * (`memory_init`, `memory_insert`, `memory_query`). The DB lives at
+ * `<workspace>/.orchestra/memory.sqlite`; the Rust layer handles opening,
+ * migrating, and (eventually) ANN search.
  *
- * In a Tauri context, the DB lives at:
- *   <workspace>/.orchestra/memory.sqlite
- *
- * When no workspace is open, we fall back to a temporary in-memory path (':memory:').
- * This keeps the panel functional even before a workspace is loaded.
- *
- * NOTE: MemoryStore uses better-sqlite3 (a native Node module). In Tauri 2 this
- * runs inside the Node-compatible renderer process; if it fails (e.g. module not
- * bundled), a warning is logged and all memory calls become no-ops.
+ * Without a workspace path we no-op rather than fall back to `:memory:` — a
+ * throwaway DB would mislead users into thinking their chats are persisted.
  */
 
-let currentDbPath: string | null = null;
-let storeInstance: any | null = null;
-let initPromise: Promise<void> | null = null;
+import {
+  memoryInit,
+  memoryInsert,
+  memoryQuery,
+  type MemoryRecord,
+} from '@/lib/ipc/memory';
 
-async function getStore(dbPath: string): Promise<any> {
-  if (storeInstance && currentDbPath === dbPath) {
-    return storeInstance;
-  }
+const initializedWorkspaces = new Set<string>();
+let activeWorkspace: string | null = null;
 
-  // Close existing store if workspace changed
-  if (storeInstance && currentDbPath !== dbPath) {
-    try {
-      await storeInstance.close();
-    } catch {
-      // ignore close errors
-    }
-    storeInstance = null;
-    initPromise = null;
-  }
-
-  if (!initPromise) {
-    currentDbPath = dbPath;
-    initPromise = (async () => {
-      // @orchestra/memory uses better-sqlite3 (native node addon) which can't
-      // run inside the Tauri WebView. Real persistence lands in Sprint 3 via a
-      // Rust-backed memory IPC layer. Until then this is a no-op.
-      storeInstance = null;
-    })();
-  }
-
-  await initPromise;
-  return storeInstance;
-}
-
-/** Return the workspace-scoped DB path, or ':memory:' as fallback. */
-function resolveDbPath(workspacePath?: string | null): string {
-  if (workspacePath) {
-    return `${workspacePath}/.orchestra/memory.sqlite`;
-  }
-  return ':memory:';
+async function ensureInit(workspacePath: string): Promise<void> {
+  if (initializedWorkspaces.has(workspacePath)) return;
+  await memoryInit(workspacePath);
+  initializedWorkspaces.add(workspacePath);
+  activeWorkspace = workspacePath;
 }
 
 /**
- * Persist a conversation turn to memory.
- * Silently no-ops if the store is unavailable.
+ * Persist a single conversation turn to the workspace's memory store.
+ * Silently no-ops when no workspace is open.
  */
 export async function persistConversationTurn(
   workspacePath: string | null | undefined,
@@ -67,12 +37,10 @@ export async function persistConversationTurn(
   role: 'user' | 'assistant',
   content: string,
 ): Promise<void> {
+  if (!workspacePath || !content) return;
   try {
-    const dbPath = resolveDbPath(workspacePath);
-    const store = await getStore(dbPath);
-    if (!store) return;
-
-    await store.insert({
+    await ensureInit(workspacePath);
+    await memoryInsert(workspacePath, {
       scope: 'session',
       kind: `${role}-message`,
       content,
@@ -84,34 +52,29 @@ export async function persistConversationTurn(
 }
 
 /**
- * Query recent session memories for the given workspace.
- * Returns an empty array if the store is unavailable.
+ * Fetch recent session memories for the workspace, newest first.
+ * Returns [] when no workspace is open or on error.
  */
 export async function getRecentMemory(
   workspacePath: string | null | undefined,
-  _topK = 10,
-): Promise<any[]> {
+  topK = 10,
+): Promise<MemoryRecord[]> {
+  if (!workspacePath) return [];
   try {
-    const dbPath = resolveDbPath(workspacePath);
-    const store = await getStore(dbPath);
-    if (!store) return [];
-    return await store.list('session');
+    await ensureInit(workspacePath);
+    return await memoryQuery(workspacePath, { scope: 'session', topK });
   } catch (err) {
     console.warn('[memory-bridge] getRecentMemory failed:', err);
     return [];
   }
 }
 
-/** Close the current store (call on app quit or workspace close). */
-export async function closeMemoryBridge(): Promise<void> {
-  if (storeInstance) {
-    try {
-      await storeInstance.close();
-    } catch {
-      // ignore
-    }
-    storeInstance = null;
-    initPromise = null;
-    currentDbPath = null;
-  }
+/** Forget cached init state — e.g. when closing the app. */
+export function closeMemoryBridge(): void {
+  initializedWorkspaces.clear();
+  activeWorkspace = null;
+}
+
+export function getActiveMemoryWorkspace(): string | null {
+  return activeWorkspace;
 }

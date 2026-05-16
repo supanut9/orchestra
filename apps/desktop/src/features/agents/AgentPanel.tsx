@@ -6,6 +6,7 @@ import type { ProviderId } from '@/stores/settings';
 import { useCurrentWorkspace } from '@/stores/workspace';
 import { streamMessage } from '@/lib/ai/provider-registry';
 import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
+import { persistConversationTurn } from '@/lib/ai/memory-bridge';
 import { isCliProvider } from '@/stores/settings';
 import { ChatMessage } from './ChatMessage';
 import { ShellToolCard } from './ShellToolCard';
@@ -95,6 +96,14 @@ export function AgentPanel() {
     sendMessage(text, async (prompt, onChunk, signal) => {
       const allMessages = [...history, { role: 'user' as const, content: prompt }];
 
+      void persistConversationTurn(workspacePath, sessionId, 'user', prompt);
+
+      let assistantBuffer = '';
+      const captureOnChunk = (chunk: string) => {
+        assistantBuffer += chunk;
+        onChunk(chunk);
+      };
+
       // CLI providers (claude-cli / codex-cli / gemini-cli) don't go through
       // Vercel AI SDK and can't use the shellTool path. Fall back to plain
       // streaming so the CLI still works; tools will be supported once we
@@ -132,7 +141,7 @@ export function AgentPanel() {
           config,
           messages: allMessages,
           tools,
-          onChunk,
+          onChunk: captureOnChunk,
           signal,
           onToolCall: (event) => {
             startToolCall(event);
@@ -146,10 +155,12 @@ export function AgentPanel() {
         await streamMessage({
           config,
           messages: allMessages,
-          onChunk,
+          onChunk: captureOnChunk,
           signal,
         });
       }
+
+      void persistConversationTurn(workspacePath, sessionId, 'assistant', assistantBuffer);
     });
   }, [
     input,
