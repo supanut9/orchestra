@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileTree } from '@/features/workspace/FileTree';
 import { OpenWorkspaceButton } from '@/features/workspace/OpenWorkspaceButton';
 import { WorkspaceSwitcher } from '@/features/workspace/WorkspaceSwitcher';
+import { CommandPalette, type PaletteCommand } from '@/features/workspace/CommandPalette';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { servicesRunAll } from '@/lib/ipc/services';
 import { UpdateChecker } from '@/features/updater/UpdateChecker';
 import { VersionBadge } from '@/features/about/VersionBadge';
 import { Editor } from '@/features/editor/Editor';
@@ -18,8 +21,57 @@ import { cn } from '@/lib/utils';
 type BottomTab = 'terminal' | 'services' | 'lanes' | 'mcp' | 'skills' | 'memory';
 
 export function App() {
-  const _currentWorkspace = useCurrentWorkspace();
+  const currentWorkspace = useCurrentWorkspace();
   const [bottomTab, setBottomTab] = useState<BottomTab>('terminal');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  const openFiles = useWorkspaceStore((s) => s.openFiles);
+  const setActiveFile = useWorkspaceStore((s) => s.setActiveFile);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const commands = useMemo<PaletteCommand[]>(() => {
+    const tabs: BottomTab[] = ['terminal', 'services', 'lanes', 'mcp', 'skills', 'memory'];
+    const tabCmds: PaletteCommand[] = tabs.map((t) => ({
+      id: `view:${t}`,
+      group: 'View',
+      title: `Show ${t.charAt(0).toUpperCase() + t.slice(1)} panel`,
+      run: () => setBottomTab(t),
+    }));
+
+    const fileCmds: PaletteCommand[] = openFiles.map((f) => ({
+      id: `file:${f.path}`,
+      group: 'File',
+      title: f.name,
+      hint: f.path,
+      run: () => setActiveFile(f.path),
+    }));
+
+    const workspacePath = currentWorkspace?.folders[0]?.path;
+    const actionCmds: PaletteCommand[] = [];
+    if (workspacePath) {
+      actionCmds.push({
+        id: 'services:run-all',
+        group: 'Action',
+        title: 'Run all services',
+        run: async () => {
+          setBottomTab('services');
+          await servicesRunAll(workspacePath);
+        },
+      });
+    }
+
+    return [...tabCmds, ...fileCmds, ...actionCmds];
+  }, [openFiles, setActiveFile, currentWorkspace]);
 
   return (
     <div className="flex h-full select-none flex-col bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
@@ -102,6 +154,12 @@ export function App() {
           </div>
         </aside>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
     </div>
   );
 }
