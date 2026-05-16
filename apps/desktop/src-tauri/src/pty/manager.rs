@@ -70,6 +70,12 @@ pub struct PtyInfo {
 // ── Internal handle ───────────────────────────────────────────────────────────
 
 /// Full runtime state for a single PTY.  Not serialisable — see `PtyInfo`.
+/// Maximum bytes of replay buffer kept per PTY. Older bytes drop from the
+/// front when the buffer is full. 256 KB is enough for most shell session
+/// startups (banners, prompts, initial command output) without blowing
+/// memory if many services run concurrently.
+const REPLAY_BUFFER_CAP: usize = 256 * 1024;
+
 pub struct PtyHandle {
     pub id: String,
     pub label: String,
@@ -83,6 +89,10 @@ pub struct PtyHandle {
     pub created_at: SystemTime,
     /// Current status string ("running" | "exited" | "crashed").
     pub status: String,
+    /// Ring buffer of recent output bytes. Lets a Terminal component that
+    /// mounts AFTER spawn replay the lost bytes before subscribing to live
+    /// `pty.output` events.
+    pub replay_buffer: Mutex<Vec<u8>>,
 }
 
 // ── Manager ───────────────────────────────────────────────────────────────────
@@ -177,6 +187,7 @@ impl PtyManager {
                 cwd,
                 created_at: SystemTime::now(),
                 status: "running".to_string(),
+                replay_buffer: Mutex::new(Vec::with_capacity(8 * 1024)),
             },
         );
 
@@ -193,7 +204,21 @@ impl PtyManager {
                 match reader.read(&mut buf) {
                     Ok(0) => break, // EOF — process exited
                     Ok(n) => {
-                        let encoded = BASE64.encode(&buf[..n]);
+                        let chunk = &buf[..n];
+
+                        // Append to replay buffer first so mount-time replay
+                        // is always consistent with what live subscribers see.
+                        if let Some(handle) = ptys_arc.get(&id_for_task) {
+                            if let Ok(mut buffer) = handle.replay_buffer.lock() {
+                                buffer.extend_from_slice(chunk);
+                                if buffer.len() > REPLAY_BUFFER_CAP {
+                                    let drop_n = buffer.len() - REPLAY_BUFFER_CAP;
+                                    buffer.drain(..drop_n);
+                                }
+                            }
+                        }
+
+                        let encoded = BASE64.encode(chunk);
                         let _ = app_for_task.emit(
                             "pty.output",
                             &PtyOutputPayload {
@@ -303,6 +328,21 @@ impl PtyManager {
 
         handle.owner = new_owner;
         Ok(())
+    }
+
+    /// Return the current replay buffer for a PTY as raw bytes.
+    /// Terminal components call this on mount to render output that was
+    /// emitted before they could subscribe to the live `pty.output` stream.
+    pub fn replay(&self, pty_id: &str) -> Result<Vec<u8>, String> {
+        let handle = self
+            .ptys
+            .get(pty_id)
+            .ok_or_else(|| format!("pty {pty_id} not found"))?;
+        let buffer = handle
+            .replay_buffer
+            .lock()
+            .map_err(|e| format!("replay buffer lock poisoned: {e}"))?;
+        Ok(buffer.clone())
     }
 
     /// Return a serialisable snapshot of all live PTYs for the tab bar.

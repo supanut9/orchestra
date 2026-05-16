@@ -165,3 +165,24 @@ pub fn pty_list(state: State<'_, PtyState>) -> Result<Vec<PtyInfo>, String> {
 
     Ok(manager.list())
 }
+
+// ── pty_replay ────────────────────────────────────────────────────────────────
+
+/// Return the recent output buffer for a PTY as a base64 string.
+/// Called by a `Terminal` component on mount to render bytes that were
+/// emitted before the component could subscribe to the live `pty.output`
+/// event stream.
+///
+/// TypeScript signature:
+/// ```ts
+/// invoke<string>('pty_replay', { ptyId })  // → base64-encoded bytes
+/// ```
+#[tauri::command]
+pub fn pty_replay(pty_id: String, state: State<'_, PtyState>) -> Result<String, String> {
+    let manager = state
+        .0
+        .lock()
+        .map_err(|e| format!("manager lock poisoned: {e}"))?;
+    let bytes = manager.replay(&pty_id)?;
+    Ok(BASE64.encode(&bytes))
+}

@@ -167,6 +167,16 @@ export function ptyList(): Promise<PtyInfo[]> {
  * unlisten();
  * ```
  */
+/**
+ * Fetch the recent output buffer for a PTY. Used by Terminal components on
+ * mount to render bytes emitted before they could subscribe to the live
+ * `pty.output` stream.
+ */
+export async function ptyReplay(ptyId: string): Promise<Uint8Array> {
+  const b64 = await invoke<string>('pty_replay', { ptyId });
+  return decodePtyOutput(b64);
+}
+
 export async function subscribeToPtyOutput(
   ptyId: string,
   handler: (bytes: Uint8Array) => void,

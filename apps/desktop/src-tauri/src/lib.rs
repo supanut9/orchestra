@@ -38,6 +38,7 @@ pub fn run() {
             pty::commands::pty_kill,
             pty::commands::pty_claim,
             pty::commands::pty_list,
+            pty::commands::pty_replay,
             // Services (Lane B)
             services::commands::services_detect,
             services::commands::services_run_all,

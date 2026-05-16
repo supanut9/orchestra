@@ -16,7 +16,13 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { SearchAddon } from '@xterm/addon-search';
 
-import { subscribeToPtyOutput, encodePtyInput, ptyWrite, ptyResize } from '@/lib/ipc/pty';
+import {
+  subscribeToPtyOutput,
+  encodePtyInput,
+  ptyWrite,
+  ptyResize,
+  ptyReplay,
+} from '@/lib/ipc/pty';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -113,13 +119,34 @@ export function Terminal({ ptyId, isActive = true }: TerminalProps) {
       });
     });
 
-    // ── Subscribe to backend PTY output ───────────────────────────────────
+    // ── Subscribe to live PTY output + replay any buffered bytes ──────────
 
+    let liveBuffer: Uint8Array[] = [];
+    let replayDone = false;
+
+    // Buffer live events that arrive while we await the replay snapshot, so
+    // we can write replay-first then live in order without duplication.
     subscribeToPtyOutput(ptyId, (bytes) => {
-      term.write(bytes);
+      if (replayDone) {
+        term.write(bytes);
+      } else {
+        liveBuffer.push(bytes);
+      }
     }).then((unlisten) => {
       unlistenOutputRef.current = unlisten;
     });
+
+    ptyReplay(ptyId)
+      .then((replayed) => {
+        if (replayed.length > 0) term.write(replayed);
+        for (const chunk of liveBuffer) term.write(chunk);
+        liveBuffer = [];
+        replayDone = true;
+      })
+      .catch((err) => {
+        console.warn('[Terminal] pty_replay failed:', err);
+        replayDone = true;
+      });
 
     // ── Resize observer ────────────────────────────────────────────────────
 
