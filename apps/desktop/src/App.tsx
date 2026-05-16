@@ -3,6 +3,7 @@ import { FileTree } from '@/features/workspace/FileTree';
 import { OpenWorkspaceButton } from '@/features/workspace/OpenWorkspaceButton';
 import { WorkspaceSwitcher } from '@/features/workspace/WorkspaceSwitcher';
 import { UpdateChecker } from '@/features/updater/UpdateChecker';
+import { VersionBadge } from '@/features/about/VersionBadge';
 import { Editor } from '@/features/editor/Editor';
 import { AgentPanel } from '@/features/agents/AgentPanel';
 import { TerminalGrid } from '@/features/terminal/TerminalGrid';
@@ -24,6 +25,7 @@ export function App() {
     <div className="flex h-full select-none flex-col bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
       <header className="flex h-10 shrink-0 items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4">
         <span className="text-sm font-semibold tracking-wide">Orchestra</span>
+        <VersionBadge />
         <span className="text-xs text-[hsl(var(--muted-foreground))]">— AI-native IDE</span>
         <div className="ml-auto flex items-center gap-2 text-xs">
           <UpdateChecker />

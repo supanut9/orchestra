@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-05-16
+
+- **Header now shows the running version** as a small `v0.1.2` pill next to
+  the Orchestra title. Sourced from `tauri.conf.json` at build time via
+  `@tauri-apps/api/app`'s `getVersion()`.
+- First release that exercises the in-app auto-updater pipeline end-to-end:
+  a user on v0.1.1 sees the green "Update v0.1.2 →" pill in the header
+  within 5s of launch, clicks it, and is restarted into v0.1.2.
+
 ## [0.1.1] — 2026-05-16
 
 Patch release adding **in-app auto-updates**, **multi-folder workspaces**,
