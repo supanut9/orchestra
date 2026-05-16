@@ -39,10 +39,14 @@ pub fn run() {
             services::commands::services_detect,
             services::commands::services_run_all,
             services::commands::services_run_one,
-            // Git, Memory, Lanes (Sprint 2 stubs)
-            ipc::git_status,
-            ipc::git_worktree_add,
-            ipc::git_worktree_remove,
+            // Git worktrees (Lane E)
+            git::commands::git_status,
+            git::commands::git_worktree_add,
+            git::commands::git_worktree_remove,
+            git::commands::git_worktree_list,
+            git::commands::git_worktree_diff,
+            git::commands::git_worktree_merge,
+            // Memory + lanes (Sprint 2/3 stubs)
             ipc::memory_query,
             ipc::memory_insert,
             ipc::list_lanes,

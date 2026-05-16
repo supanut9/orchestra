@@ -1,10 +1,13 @@
-#![allow(dead_code, unused_variables)]
-//! Git worktree management — Lane C implementation target.
+//! Git worktree management — Lane E (Sprint 2).
 //!
-//! TODO Lane C: use `git2` to implement:
-//!   - `status(repo_path)` → branch + modified + untracked files
-//!   - `worktree_add(repo, branch, path)` → creates `.orchestra/worktrees/<lane-id>`
-//!   - `worktree_remove(repo, path)` → removes worktree and optional branch
+//! This module provides Tauri commands for:
+//!   - `git_status`          — repository status (branch, HEAD, modified/untracked/staged files)
+//!   - `git_worktree_add`    — create a new worktree at `.orchestra/worktrees/<lane-id>`
+//!   - `git_worktree_remove` — prune metadata and delete the directory
+//!   - `git_worktree_list`   — enumerate all registered worktrees
+//!   - `git_worktree_diff`   — per-file diff with hunk detail for the diff viewer
+//!   - `git_worktree_merge`  — merge a lane branch back into a target branch
 //!
-//! Each Lane spawns an isolated worktree so agents can modify files
-//! in parallel without conflicting with the main branch or each other.
+//! Commands are registered in `crate::lib.rs` via `tauri::generate_handler![]`.
+
+pub mod commands;

@@ -5,10 +5,14 @@ import { Editor } from '@/features/editor/Editor';
 import { AgentPanel } from '@/features/agents/AgentPanel';
 import { TerminalGrid } from '@/features/terminal/TerminalGrid';
 import { ServiceDashboard } from '@/features/services/ServiceDashboard';
+import { LaneBoard } from '@/features/lanes/LaneBoard';
+import { MCPManager } from '@/features/mcp/MCPManager';
+import { SkillManager } from '@/features/skills/SkillManager';
+import { MemoryHub } from '@/features/memory/MemoryHub';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
-type BottomTab = 'terminal' | 'services';
+type BottomTab = 'terminal' | 'services' | 'lanes' | 'mcp' | 'skills' | 'memory';
 
 export function App() {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
@@ -48,8 +52,8 @@ export function App() {
             <Editor />
           </div>
 
-          <div className="h-64 shrink-0 border-t border-[hsl(var(--border))]">
-            <div className="flex h-8 items-center gap-0 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-2">
+          <div className="h-72 shrink-0 border-t border-[hsl(var(--border))]">
+            <div className="flex h-8 items-center gap-0 overflow-x-auto border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-2">
               <BottomTabButton
                 active={bottomTab === 'terminal'}
                 onClick={() => setBottomTab('terminal')}
@@ -62,9 +66,32 @@ export function App() {
               >
                 Services
               </BottomTabButton>
+              <BottomTabButton active={bottomTab === 'lanes'} onClick={() => setBottomTab('lanes')}>
+                Lanes
+              </BottomTabButton>
+              <BottomTabButton active={bottomTab === 'mcp'} onClick={() => setBottomTab('mcp')}>
+                MCP
+              </BottomTabButton>
+              <BottomTabButton
+                active={bottomTab === 'skills'}
+                onClick={() => setBottomTab('skills')}
+              >
+                Skills
+              </BottomTabButton>
+              <BottomTabButton
+                active={bottomTab === 'memory'}
+                onClick={() => setBottomTab('memory')}
+              >
+                Memory
+              </BottomTabButton>
             </div>
             <div className="h-[calc(100%-2rem)]">
-              {bottomTab === 'terminal' ? <TerminalGrid /> : <ServiceDashboard />}
+              {bottomTab === 'terminal' && <TerminalGrid />}
+              {bottomTab === 'services' && <ServiceDashboard />}
+              {bottomTab === 'lanes' && <LaneBoard />}
+              {bottomTab === 'mcp' && <MCPManager />}
+              {bottomTab === 'skills' && <SkillManager />}
+              {bottomTab === 'memory' && <MemoryHub />}
             </div>
           </div>
         </main>

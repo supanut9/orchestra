@@ -167,9 +167,15 @@ importers:
       '@orchestra/ai-runtime':
         specifier: workspace:*
         version: link:../../packages/ai-runtime
+      '@orchestra/mcp-client':
+        specifier: workspace:*
+        version: link:../../packages/mcp-client
       '@orchestra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
+      '@orchestra/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.100.10(react@19.2.6)

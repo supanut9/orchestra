@@ -7,13 +7,6 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitStatus {
-    pub branch: String,
-    pub modified: Vec<String>,
-    pub untracked: Vec<String>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,33 +44,6 @@ pub struct Lane {
     pub pty_id: Option<String>,
     pub agent_session_id: Option<String>,
     pub created_at: String,
-}
-
-#[tauri::command]
-pub async fn git_status(repo_path: String) -> Result<GitStatus, String> {
-    let _ = repo_path;
-    Ok(GitStatus {
-        branch: "main".to_string(),
-        modified: vec![],
-        untracked: vec![],
-    })
-}
-
-#[tauri::command]
-pub async fn git_worktree_add(
-    _repo_path: String,
-    _branch: String,
-    _worktree_path: String,
-) -> Result<(), String> {
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn git_worktree_remove(
-    _repo_path: String,
-    _worktree_path: String,
-) -> Result<(), String> {
-    Ok(())
 }
 
 #[tauri::command]

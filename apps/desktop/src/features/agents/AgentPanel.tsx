@@ -1,10 +1,13 @@
 import { useRef, useEffect, useState, useCallback, type KeyboardEvent } from 'react';
 import { useAgentStore } from '@/stores/agent';
-import type { ChatMessage as ChatMessageType } from '@/stores/agent';
+import type { ChatMessage as ChatMessageType, ShellToolCall } from '@/stores/agent';
 import { useSettingsStore } from '@/stores/settings';
 import type { ProviderId } from '@/stores/settings';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { streamMessage } from '@/lib/ai/provider-registry';
+import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
 import { ChatMessage } from './ChatMessage';
+import { ShellToolCard } from './ShellToolCard';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
 
 // ── Provider display metadata ──────────────────────────────────────────────
@@ -20,15 +23,32 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function AgentPanel() {
-  const { messages, isStreaming, error, sendMessage, cancelStream, clearMessages, clearError } =
-    useAgentStore();
+  const {
+    messages,
+    isStreaming,
+    error,
+    sendMessage,
+    cancelStream,
+    clearMessages,
+    clearError,
+    activeShellPtyIds,
+    shellToolCalls,
+    startToolCall,
+    finishToolCall,
+    recordShellPty,
+  } = useAgentStore();
   const { providers, activeProviderId, activeModelId, setActiveProvider } = useSettingsStore();
+  const { currentWorkspace } = useWorkspaceStore();
 
   const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  /** Whether the agent is allowed to run shell commands. */
+  const [shellEnabled, setShellEnabled] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** Stable session ID for this panel mount — used as PTY owner. */
+  const sessionIdRef = useRef(`panel-${Date.now()}`);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -36,11 +56,10 @@ export function AgentPanel() {
   }, [messages]);
 
   const activeConfig = activeProviderId ? providers[activeProviderId] : null;
+  const workspacePath = currentWorkspace?.path ?? null;
 
   /**
    * Build the conversation history for multi-turn context.
-   * We pass the full history EXCEPT the last message because sendMessage
-   * will append the new user message itself.
    */
   const buildHistory = useCallback(
     (): { role: 'user' | 'assistant'; content: string }[] =>
@@ -53,6 +72,12 @@ export function AgentPanel() {
     [messages],
   );
 
+  /** Jump to terminal tab — dispatched by ShellToolCard. */
+  const handleJumpToTerminal = useCallback((ptyId: string) => {
+    // Emit a custom DOM event that TerminalGrid (Lane B) can listen to.
+    window.dispatchEvent(new CustomEvent('orchestra:focus-terminal', { detail: { ptyId } }));
+  }, []);
+
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || isStreaming || !activeConfig) return;
@@ -61,16 +86,73 @@ export function AgentPanel() {
 
     const history = buildHistory();
     const config = activeConfig;
+    const sessionId = sessionIdRef.current;
 
     sendMessage(text, async (prompt, onChunk, signal) => {
-      await streamMessage({
-        config,
-        messages: [...history, { role: 'user', content: prompt }],
-        onChunk,
-        signal,
-      });
+      const allMessages = [...history, { role: 'user' as const, content: prompt }];
+
+      if (shellEnabled) {
+        // Tool-enabled path: import shellTool lazily to avoid loading it before needed
+        const { shellTool } = await import('@orchestra/ai-runtime');
+        const runShellCommand = createShellRunner(sessionId, workspacePath);
+
+        const tools = {
+          shell: shellTool(runShellCommand, {
+            onSpawn: (ptyId, command) => {
+              // Find the matching toolCallId from the store (populated by onToolCall below)
+              recordShellPty(ptyId);
+              // Update any running tool call that matches this command with the ptyId
+              const calls = useAgentStore.getState().shellToolCalls;
+              const match = Object.values(calls).find(
+                (c) => c.command === command && c.status === 'running' && !c.ptyId,
+              );
+              if (match) {
+                useAgentStore.setState((s) => ({
+                  shellToolCalls: {
+                    ...s.shellToolCalls,
+                    [match.toolCallId]: { ...match, ptyId },
+                  },
+                }));
+              }
+            },
+          }),
+        };
+
+        await streamWithTools({
+          config,
+          messages: allMessages,
+          tools,
+          onChunk,
+          signal,
+          onToolCall: (event) => {
+            startToolCall(event);
+          },
+          onToolResult: (event) => {
+            finishToolCall(event);
+          },
+        });
+      } else {
+        // Plain streaming — no tools
+        await streamMessage({
+          config,
+          messages: allMessages,
+          onChunk,
+          signal,
+        });
+      }
     });
-  }, [input, isStreaming, activeConfig, buildHistory, sendMessage]);
+  }, [
+    input,
+    isStreaming,
+    activeConfig,
+    buildHistory,
+    sendMessage,
+    shellEnabled,
+    workspacePath,
+    startToolCall,
+    finishToolCall,
+    recordShellPty,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -144,6 +226,27 @@ export function AgentPanel() {
         )}
       </div>
 
+      {/* Active shells badge */}
+      {activeShellPtyIds.length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1 text-[11px] text-yellow-400 border-b border-[hsl(var(--border))] bg-yellow-400/5 shrink-0">
+          <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 shrink-0" />
+          <span>
+            Agent has {activeShellPtyIds.length} live terminal
+            {activeShellPtyIds.length !== 1 ? 's' : ''}
+          </span>
+          {activeShellPtyIds.map((id) => (
+            <button
+              key={id}
+              onClick={() => handleJumpToTerminal(id)}
+              className="ml-1 px-1.5 py-0.5 rounded border border-yellow-400/30 hover:bg-yellow-400/10 transition-colors font-mono text-[10px]"
+              title={`Jump to terminal ${id}`}
+            >
+              {id.slice(0, 8)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Message list */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
         {messages.length === 0 && (
@@ -184,7 +287,24 @@ export function AgentPanel() {
         )}
 
         {messages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} />
+          <div key={msg.id}>
+            <ChatMessage message={msg} />
+            {/* Render tool call cards inline after each assistant message */}
+            {msg.role === 'assistant' &&
+              (Object.values(shellToolCalls) as ShellToolCall[])
+                .filter((tc) => {
+                  // Show tool calls that were initiated during this message's streaming window.
+                  // We approximate by checking if the toolCall started at or after this message.
+                  return tc.startedAt >= msg.createdAt.getTime() - 500;
+                })
+                .map((tc) => (
+                  <ShellToolCard
+                    key={tc.toolCallId}
+                    toolCall={tc}
+                    onJumpToTerminal={handleJumpToTerminal}
+                  />
+                ))}
+          </div>
         ))}
 
         {/* Error toast */}
@@ -195,7 +315,7 @@ export function AgentPanel() {
               onClick={clearError}
               className="shrink-0 font-bold hover:text-red-300 transition-colors"
             >
-              ×
+              x
             </button>
           </div>
         )}
@@ -205,6 +325,24 @@ export function AgentPanel() {
 
       {/* Compose box */}
       <div className="shrink-0 border-t border-[hsl(var(--border))] p-2">
+        {/* Shell tool toggle */}
+        <div className="flex items-center gap-2 mb-1.5 px-1">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={shellEnabled}
+              onChange={(e) => setShellEnabled(e.target.checked)}
+              className="w-3 h-3 rounded accent-[hsl(var(--primary))]"
+            />
+            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Shell tools</span>
+          </label>
+          {shellEnabled && (
+            <span className="text-[10px] text-yellow-400/80">
+              Agent may run commands in your terminal
+            </span>
+          )}
+        </div>
+
         <div className="flex gap-2 items-end">
           <textarea
             ref={textareaRef}

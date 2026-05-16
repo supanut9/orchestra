@@ -44,7 +44,9 @@
     "lucide-react": "^0.469.0",
     "nanoid": "^5.0.9",
     "@orchestra/ai-runtime": "workspace:*",
-    "@orchestra/memory": "workspace:*"
+    "@orchestra/memory": "workspace:*",
+    "@orchestra/mcp-client": "workspace:*",
+    "@orchestra/skills": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",
