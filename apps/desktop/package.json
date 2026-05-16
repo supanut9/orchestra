@@ -41,7 +41,7 @@
     "clsx": "^2.1.1",
     "class-variance-authority": "^0.7.1",
     "tailwind-merge": "^2.5.0",
-    "lucide-react": "^0.469.0",
+    "lucide-react": "^1.16.0",
     "nanoid": "^5.0.9",
     "@orchestra/ai-runtime": "workspace:*",
     "@orchestra/memory": "workspace:*",
