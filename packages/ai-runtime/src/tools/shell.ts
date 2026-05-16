@@ -30,6 +30,13 @@ export type RunShellCommandFn = (opts: {
   command: string;
   cwd?: string;
   timeoutMs?: number;
+  /**
+   * Optional PTY UUID to target. When supplied, the command is written into
+   * the existing PTY (which must already be owned by this agent session via
+   * pty_claim) instead of spawning a fresh one. The user-visible terminal
+   * stays open across calls so they can watch the agent work.
+   */
+  targetPtyId?: string;
 }) => Promise<ShellCommandResult>;
 
 /**
@@ -66,6 +73,12 @@ const shellParametersSchema = z.object({
     .describe(
       'Maximum milliseconds to wait for the command to finish before killing it. Defaults to 30 000 ms.',
     ),
+  targetPtyId: z
+    .string()
+    .optional()
+    .describe(
+      'Optional PTY UUID to run the command in. Use this when the user has handed you an existing terminal (e.g. a running service) so they can watch the command execute there instead of in a fresh PTY.',
+    ),
 });
 
 export type ShellToolParameters = z.infer<typeof shellParametersSchema>;
@@ -94,12 +107,18 @@ export function shellTool(runShellCommand: RunShellCommandFn, hooks: ShellToolHo
       "Returns the command's combined stdout+stderr when it completes. " +
       'The user can see the output in real time and type into the terminal while the command is running.',
     parameters: shellParametersSchema,
-    execute: async ({ command, cwd, timeoutMs }) => {
+    execute: async ({ command, cwd, timeoutMs, targetPtyId }) => {
       let result: ShellCommandResult;
       try {
-        const opts: { command: string; cwd?: string; timeoutMs?: number } = { command };
+        const opts: {
+          command: string;
+          cwd?: string;
+          timeoutMs?: number;
+          targetPtyId?: string;
+        } = { command };
         if (cwd !== undefined) opts.cwd = cwd;
         if (timeoutMs !== undefined) opts.timeoutMs = timeoutMs;
+        if (targetPtyId !== undefined) opts.targetPtyId = targetPtyId;
         result = await runShellCommand(opts);
       } catch (err) {
         hooks.onError?.(command, err);

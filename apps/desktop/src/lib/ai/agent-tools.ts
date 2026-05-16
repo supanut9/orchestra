@@ -11,7 +11,14 @@
  * It MUST NOT import from the blacklisted provider-registry, memory-bridge or index.
  */
 
-import { ptySpawn, ptyKill, subscribeToPtyOutput, subscribeToPtyStatus } from '@/lib/ipc/pty';
+import {
+  ptySpawn,
+  ptyKill,
+  ptyWrite,
+  encodePtyInput,
+  subscribeToPtyOutput,
+  subscribeToPtyStatus,
+} from '@/lib/ipc/pty';
 import type { ProviderConfig } from '@/stores/settings';
 
 // ── Types re-exported for consumers ───────────────────────────────────────────
@@ -20,6 +27,8 @@ export interface RunShellCommandOpts {
   command: string;
   cwd?: string;
   timeoutMs?: number;
+  /** If supplied, write into this PTY instead of spawning a new one. */
+  targetPtyId?: string;
 }
 
 export interface ShellCommandResult {
@@ -97,6 +106,82 @@ export function tokenizeCommand(command: string): string[] {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
+ * Run `command` inside an existing PTY (one the user already handed to this
+ * agent via the "Hand to AI" toggle).
+ *
+ * The PTY hosts an interactive shell, so there is no process-exit signal to
+ * wait on. We append a unique sentinel echo to the command and resolve when
+ * we see that sentinel come back through stdout.
+ */
+async function runInAttachedPty(
+  ptyId: string,
+  command: string,
+  timeoutMs: number,
+): Promise<ShellCommandResult> {
+  const sentinel = `__ORCH_DONE_${Math.random().toString(36).slice(2, 10)}__`;
+  // Stripping the start-of-line sentinel out of the output keeps the agent's
+  // result clean. We still leave it visible in the terminal so the user can
+  // see "the agent finished" markers if they read along.
+  const wrapped = `${command}; echo ${sentinel}\n`;
+
+  const output = new Promise<string>((resolve, reject) => {
+    let accumulated = '';
+    let unlistenOutput: (() => void) | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      unlistenOutput?.();
+    };
+
+    const settle = (text: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(text);
+    };
+
+    const fail = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    const timer = setTimeout(() => {
+      fail(
+        new Error(
+          `shellTool: command "${command}" did not complete within ${timeoutMs} ms in attached PTY ${ptyId}`,
+        ),
+      );
+    }, timeoutMs);
+
+    subscribeToPtyOutput(ptyId, (bytes: Uint8Array) => {
+      accumulated += new TextDecoder().decode(bytes);
+      const idx = accumulated.indexOf(sentinel);
+      if (idx >= 0) {
+        clearTimeout(timer);
+        // Strip the sentinel and everything after it (next prompt).
+        settle(accumulated.slice(0, idx).replace(/\r?\n$/, ''));
+      }
+    })
+      .then((fn) => {
+        unlistenOutput = fn;
+      })
+      .catch(fail);
+  });
+
+  try {
+    await ptyWrite(ptyId, encodePtyInput(wrapped));
+  } catch (err) {
+    throw new Error(
+      `shellTool: pty_write failed for ${ptyId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  return { ptyId, output };
+}
+
+/**
  * Create a `runShellCommand` function bound to a specific agent session.
  *
  * The returned function:
@@ -113,7 +198,17 @@ export function createShellRunner(
   sessionId: string,
   workspacePath: string | null,
 ): (opts: RunShellCommandOpts) => Promise<ShellCommandResult> {
-  return async function runShellCommand({ command, cwd, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  return async function runShellCommand({
+    command,
+    cwd,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    targetPtyId,
+  }) {
+    // ── Attached-PTY path: write into an existing user-watched terminal ────
+    if (targetPtyId) {
+      return runInAttachedPty(targetPtyId, command, timeoutMs);
+    }
+
     const effectiveCwd =
       cwd ?? workspacePath ?? (typeof process !== 'undefined' ? (process.env['HOME'] ?? '/') : '/');
 
