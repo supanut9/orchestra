@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-05-16
+
+- **Auto-detect CLI binaries.** Settings → Claude CLI / Codex CLI / Gemini
+  CLI rows now auto-fill the binary path on first open by running
+  `command -v <name>` through the user's login shell (so PATH from
+  `.zshrc` / `.bashrc` is sourced — macOS GUI apps don't inherit shell
+  PATH otherwise). Manual "Detect" button next to the input also re-runs
+  the probe. Shows ✓ Found / ⚠ Not found feedback.
+
 ## [0.1.2] — 2026-05-16
 
 - **Header now shows the running version** as a small `v0.1.2` pill next to
