@@ -6,6 +6,7 @@ import type { ProviderId } from '@/stores/settings';
 import { useCurrentWorkspace } from '@/stores/workspace';
 import { streamMessage } from '@/lib/ai/provider-registry';
 import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
+import { isCliProvider } from '@/stores/settings';
 import { ChatMessage } from './ChatMessage';
 import { ShellToolCard } from './ShellToolCard';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
@@ -94,7 +95,13 @@ export function AgentPanel() {
     sendMessage(text, async (prompt, onChunk, signal) => {
       const allMessages = [...history, { role: 'user' as const, content: prompt }];
 
-      if (shellEnabled) {
+      // CLI providers (claude-cli / codex-cli / gemini-cli) don't go through
+      // Vercel AI SDK and can't use the shellTool path. Fall back to plain
+      // streaming so the CLI still works; tools will be supported once we
+      // wire shell calls into the CLI prompt in a later sprint.
+      const useTools = shellEnabled && !isCliProvider(config);
+
+      if (useTools) {
         // Tool-enabled path: import shellTool lazily to avoid loading it before needed
         const { shellTool } = await import('@orchestra/ai-runtime');
         const runShellCommand = createShellRunner(sessionId, workspacePath);
@@ -328,20 +335,35 @@ export function AgentPanel() {
 
       {/* Compose box */}
       <div className="shrink-0 border-t border-[hsl(var(--border))] p-2">
-        {/* Shell tool toggle */}
+        {/* Shell tool toggle — disabled for CLI providers (not yet supported) */}
         <div className="flex items-center gap-2 mb-1.5 px-1">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <label
+            className={`flex items-center gap-1.5 select-none ${
+              activeConfig && isCliProvider(activeConfig) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            }`}
+            title={
+              activeConfig && isCliProvider(activeConfig)
+                ? 'Shell tools are not supported with CLI providers yet (Sprint 5).'
+                : 'Let the agent run shell commands in a PTY you can watch.'
+            }
+          >
             <input
               type="checkbox"
-              checked={shellEnabled}
+              checked={shellEnabled && !(activeConfig && isCliProvider(activeConfig))}
+              disabled={!!(activeConfig && isCliProvider(activeConfig))}
               onChange={(e) => setShellEnabled(e.target.checked)}
               className="w-3 h-3 rounded accent-[hsl(var(--primary))]"
             />
             <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Shell tools</span>
           </label>
-          {shellEnabled && (
+          {shellEnabled && activeConfig && !isCliProvider(activeConfig) && (
             <span className="text-[10px] text-yellow-400/80">
               Agent may run commands in your terminal
+            </span>
+          )}
+          {activeConfig && isCliProvider(activeConfig) && (
+            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              (Not available for CLI providers)
             </span>
           )}
         </div>
