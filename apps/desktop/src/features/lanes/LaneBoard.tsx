@@ -4,7 +4,8 @@ import { Wand2, Trash2 } from 'lucide-react';
 import { useLanesStore } from '@/stores/lanes';
 import { useCurrentWorkspace } from '@/stores/workspace';
 import { useSettingsStore } from '@/stores/settings';
-import { getProviderModel, streamMessage } from '@/lib/ai/provider-registry';
+import { getProviderModel } from '@/lib/ai/provider-registry';
+import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
 import { LaneCard } from './LaneCard';
 
 export function LaneBoard() {
@@ -39,14 +40,34 @@ export function LaneBoard() {
     }
   }
 
+  const workspacePath = currentWorkspace?.folders[0]?.path ?? null;
+
+  // Tool-enabled lane runner: the agent gets a shell tool bound to the
+  // lane's own bash PTY (via targetPtyId in the system prompt) so the user
+  // can watch every command execute in the lane card's MiniTerminal.
   const laneStream = activeConfig
-    ? (prompt: string, onChunk: (c: string) => void, signal: AbortSignal) =>
-        streamMessage({
+    ? async (
+        prompt: string,
+        ptyId: string,
+        sessionId: string,
+        onChunk: (c: string) => void,
+        signal: AbortSignal,
+      ) => {
+        const { shellTool } = await import('@orchestra/ai-runtime');
+        const runShell = createShellRunner(sessionId, workspacePath);
+        const tools = { shell: shellTool(runShell) };
+        await streamWithTools({
           config: activeConfig,
           messages: [{ role: 'user', content: prompt }],
+          system:
+            `You are working inside a dedicated git worktree with a bash PTY ready for you. ` +
+            `When you run the shell tool, ALWAYS pass targetPtyId="${ptyId}" so the user can ` +
+            `watch your commands execute in the lane's terminal instead of in a fresh PTY.`,
+          tools,
           onChunk,
           signal,
-        })
+        });
+      }
     : undefined;
 
   return (

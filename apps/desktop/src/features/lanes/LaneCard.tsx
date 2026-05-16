@@ -126,9 +126,16 @@ function MiniTerminal({ ptyId }: MiniTerminalProps) {
 
 export interface LaneCardProps {
   lane: Lane;
-  /** Injected stream function so the card stays provider-agnostic. */
+  /**
+   * Injected agent runner. Called once after the worktree + PTY are spawned;
+   * receives the lane's ptyId so the shell tool can target it via
+   * targetPtyId, and the agent session id for ownership badging.
+   * Provider-agnostic so the card can be unit-tested without an LLM.
+   */
   streamMessage?: (
     prompt: string,
+    ptyId: string,
+    sessionId: string,
     onChunk: (chunk: string) => void,
     signal: AbortSignal,
   ) => Promise<void>;
@@ -213,16 +220,19 @@ export function LaneCard({ lane, streamMessage }: LaneCardProps) {
           `You are working on lane "${lane.title}". ` +
           `Goal: ${lane.description}. ` +
           `The worktree is at ${worktreeInfo.path}. ` +
-          `Use shell commands to make progress on the goal.`;
+          `Use the shell tool to make progress on the goal. Remember to pass ` +
+          `targetPtyId="${ptyId}" on every shell call so the user can watch.`;
 
         const abort = new AbortController();
         abortRef.current = abort;
 
-        streamMessage(prompt, () => {}, abort.signal).catch((err: unknown) => {
-          if ((err as Error)?.name !== 'AbortError') {
-            console.warn(`[Lane ${lane.id}] agent stream error:`, err);
-          }
-        });
+        streamMessage(prompt, ptyId, agentSessionId, () => {}, abort.signal).catch(
+          (err: unknown) => {
+            if ((err as Error)?.name !== 'AbortError') {
+              console.warn(`[Lane ${lane.id}] agent stream error:`, err);
+            }
+          },
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
