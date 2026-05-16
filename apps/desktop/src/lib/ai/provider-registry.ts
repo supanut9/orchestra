@@ -17,6 +17,8 @@
  */
 
 import type { ProviderConfig } from '@/stores/settings';
+import { isCliProvider } from '@/stores/settings';
+import { streamCli } from './cli-stream';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type LanguageModel = any;
@@ -57,9 +59,25 @@ export async function streamMessage(opts: {
   onChunk: (chunk: string) => void;
   signal?: AbortSignal;
 }): Promise<void> {
+  // CLI providers — spawn the local CLI binary via the PTY backend.
+  if (isCliProvider(opts.config)) {
+    // CLIs are single-turn: send the most recent user message. Multi-turn
+    // context is the CLI's responsibility (or we'd need to flatten history
+    // into a single prompt, which most CLIs handle fine).
+    const userMsg = [...opts.messages].reverse().find((m) => m.role === 'user');
+    if (!userMsg) return;
+    const cliOpts: Parameters<typeof streamCli>[0] = {
+      config: opts.config,
+      prompt: userMsg.content,
+      onChunk: opts.onChunk,
+    };
+    if (opts.signal) cliOpts.signal = opts.signal;
+    await streamCli(cliOpts);
+    return;
+  }
+
+  // API providers — Vercel AI SDK streamText.
   const model = await getProviderModel(opts.config);
-  // @orchestra/ai-runtime/stream re-exports streamText from the ai package,
-  // keeping `ai` out of apps/desktop's direct dependency list.
   const { streamText } = await import('@orchestra/ai-runtime/stream');
   const result = streamText({
     model,
@@ -77,6 +95,25 @@ export async function streamMessage(opts: {
  * Returns the trimmed response text or throws on failure.
  */
 export async function testProviderConnection(config: ProviderConfig): Promise<string> {
+  if (isCliProvider(config)) {
+    let text = '';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15_000);
+    try {
+      await streamCli({
+        config,
+        prompt: 'Reply with exactly one word: OK',
+        onChunk: (chunk) => {
+          text += chunk;
+        },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    return text.trim();
+  }
+
   const model = await getProviderModel(config);
   const { streamText } = await import('@orchestra/ai-runtime/stream');
   const result = streamText({

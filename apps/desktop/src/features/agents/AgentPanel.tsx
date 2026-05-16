@@ -18,6 +18,9 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
   google: 'Google',
   ollama: 'Ollama',
   openrouter: 'OpenRouter',
+  'claude-cli': 'Claude CLI',
+  'codex-cli': 'Codex CLI',
+  'gemini-cli': 'Gemini CLI',
 };
 
 // ── Main component ─────────────────────────────────────────────────────────

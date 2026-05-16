@@ -143,7 +143,7 @@ function FolderRoot({ workspaceId, folder }: FolderRootProps) {
   const openFile = useWorkspaceStore((s) => s.openFile);
   const removeFolder = useWorkspaceStore((s) => s.removeFolder);
 
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [nodes, setNodes] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

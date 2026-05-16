@@ -1,6 +1,11 @@
 import { useState } from 'react';
-import { useSettingsStore } from '@/stores/settings';
-import type { ProviderId, ProviderConfig } from '@/stores/settings';
+import { useSettingsStore, DEFAULT_CLI_PATHS } from '@/stores/settings';
+import type {
+  ProviderId,
+  ProviderConfig,
+  CliProviderId,
+  CliProviderConfig,
+} from '@/stores/settings';
 import { testProviderConnection } from '@/lib/ai/provider-registry';
 
 // ── Provider metadata ──────────────────────────────────────────────────────
@@ -10,8 +15,16 @@ interface ProviderMeta {
   label: string;
   needsApiKey: boolean;
   needsBaseUrl: boolean;
+  /** CLI providers are auth-by-subprocess; no API key, no base URL. */
+  isCli?: boolean;
   defaultBaseUrl?: string;
   models: string[];
+}
+
+const CLI_IDS: CliProviderId[] = ['claude-cli', 'codex-cli', 'gemini-cli'];
+
+function isCliId(id: ProviderId): id is CliProviderId {
+  return (CLI_IDS as ProviderId[]).includes(id);
 }
 
 const PROVIDERS: ProviderMeta[] = [
@@ -69,6 +82,31 @@ const PROVIDERS: ProviderMeta[] = [
       'mistralai/mistral-large',
     ],
   },
+  // ── CLI providers — use local CLI binaries with their own auth ──────────
+  {
+    id: 'claude-cli',
+    label: 'Claude Code CLI (uses Max sub)',
+    needsApiKey: false,
+    needsBaseUrl: false,
+    isCli: true,
+    models: [],
+  },
+  {
+    id: 'codex-cli',
+    label: 'OpenAI Codex CLI',
+    needsApiKey: false,
+    needsBaseUrl: false,
+    isCli: true,
+    models: [],
+  },
+  {
+    id: 'gemini-cli',
+    label: 'Gemini CLI',
+    needsApiKey: false,
+    needsBaseUrl: false,
+    isCli: true,
+    models: [],
+  },
 ];
 
 // ── Provider row form ──────────────────────────────────────────────────────
@@ -83,9 +121,14 @@ function ProviderRow({ meta }: ProviderRowProps) {
 
   const saved = providers[meta.id];
 
+  const cliDefault = meta.isCli && isCliId(meta.id) ? DEFAULT_CLI_PATHS[meta.id][0] ?? meta.id.replace('-cli', '') : '';
+
   const [apiKey, setApiKey] = useState<string>((saved as any)?.apiKey ?? '');
   const [baseUrl, setBaseUrl] = useState<string>(
     (saved as any)?.baseUrl ?? meta.defaultBaseUrl ?? '',
+  );
+  const [binaryPath, setBinaryPath] = useState<string>(
+    (saved as any)?.binaryPath ?? cliDefault,
   );
   const [model, setModel] = useState<string>(saved?.model ?? meta.models[0] ?? '');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
@@ -95,6 +138,11 @@ function ProviderRow({ meta }: ProviderRowProps) {
   const isActive = activeProviderId === meta.id;
 
   function buildConfig(): ProviderConfig {
+    if (meta.isCli && isCliId(meta.id)) {
+      const cfg: CliProviderConfig = { providerId: meta.id, binaryPath };
+      if (model) cfg.model = model;
+      return cfg;
+    }
     if (meta.id === 'ollama') {
       const cfg: ProviderConfig = { providerId: 'ollama' };
       if (baseUrl) cfg.baseUrl = baseUrl;
@@ -131,7 +179,11 @@ function ProviderRow({ meta }: ProviderRowProps) {
     setActiveProvider(meta.id, model);
   }
 
-  const canSave = meta.needsApiKey ? apiKey.trim().length > 0 : true;
+  const canSave = meta.isCli
+    ? binaryPath.trim().length > 0
+    : meta.needsApiKey
+      ? apiKey.trim().length > 0
+      : true;
 
   return (
     <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 space-y-3">
@@ -196,24 +248,49 @@ function ProviderRow({ meta }: ProviderRowProps) {
         </div>
       )}
 
-      {/* Model select */}
-      <div className="space-y-1">
-        <label className="text-xs text-[hsl(var(--muted-foreground))]">Model</label>
-        <select
-          value={model}
-          onChange={(e) => {
-            setModel(e.target.value);
-            setDirty(true);
-          }}
-          className="w-full rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
-        >
-          {meta.models.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Binary path (CLI providers) */}
+      {meta.isCli && (
+        <div className="space-y-1">
+          <label className="text-xs text-[hsl(var(--muted-foreground))]">
+            Binary path
+            <span className="ml-1 text-[10px] text-[hsl(var(--muted-foreground))]">
+              (uses the CLI&apos;s own auth — no API key needed)
+            </span>
+          </label>
+          <input
+            type="text"
+            value={binaryPath}
+            placeholder={cliDefault}
+            onChange={(e) => {
+              setBinaryPath(e.target.value);
+              setDirty(true);
+              setTestStatus('idle');
+            }}
+            className="w-full rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm font-mono placeholder-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+          />
+        </div>
+      )}
+
+      {/* Model select — only for non-CLI providers (CLIs pick their own) */}
+      {!meta.isCli && meta.models.length > 0 && (
+        <div className="space-y-1">
+          <label className="text-xs text-[hsl(var(--muted-foreground))]">Model</label>
+          <select
+            value={model}
+            onChange={(e) => {
+              setModel(e.target.value);
+              setDirty(true);
+            }}
+            className="w-full rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+          >
+            {meta.models.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Test error message */}
       {testStatus === 'error' && testError && (
