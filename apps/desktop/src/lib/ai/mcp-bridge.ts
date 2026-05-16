@@ -55,9 +55,7 @@ export interface MCPServerStatus extends MCPServer {
   tools?: MCPTool[];
 }
 
-export async function getStatus(
-  workspacePath: string | null | undefined,
-): Promise<MCPServer[]> {
+export async function getStatus(workspacePath: string | null | undefined): Promise<MCPServer[]> {
   if (!workspacePath) return [];
   const config = await loadConfig(workspacePath);
   return Object.entries(config.servers).map(([id, cfg]) => ({
@@ -80,10 +78,7 @@ export async function restartServer(workspacePath: string, serverId: string): Pr
   await startServer(workspacePath, serverId);
 }
 
-export async function listTools(
-  _workspacePath: string,
-  _serverId: string,
-): Promise<MCPTool[]> {
+export async function listTools(_workspacePath: string, _serverId: string): Promise<MCPTool[]> {
   // Real implementation will spawn the server and call MCP `tools/list` over
   // stdio. Sprint 3.
   return [];
