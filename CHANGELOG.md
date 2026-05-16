@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-05-16
+
+- **New app icon.** Replaces the plain purple placeholder with a designed
+  mark: indigo gradient background, three white "lanes" converging upward
+  into a single point — reads as both the product's parallel-task-lanes
+  pitch and a stylized conductor's gesture. Generated all platform variants
+  (macOS .icns, Windows .ico, Linux PNGs, iOS / Android adaptive icons).
+
 ## [0.1.3] — 2026-05-16
 
 - **Auto-detect CLI binaries.** Settings → Claude CLI / Codex CLI / Gemini
