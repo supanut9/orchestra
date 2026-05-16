@@ -82,8 +82,8 @@ catalogs:
       specifier: ^0.18.0
       version: 0.18.0
     '@xterm/xterm':
-      specifier: ^5.5.0
-      version: 5.5.0
+      specifier: ^6.0.0
+      version: 6.0.0
     ai:
       specifier: ^4.0.0
       version: 4.3.19
@@ -202,16 +202,16 @@ importers:
         version: 2.10.1
       '@xterm/addon-fit':
         specifier: 'catalog:'
-        version: 0.10.0(@xterm/xterm@5.5.0)
+        version: 0.10.0(@xterm/xterm@6.0.0)
       '@xterm/addon-search':
         specifier: 'catalog:'
-        version: 0.15.0(@xterm/xterm@5.5.0)
+        version: 0.15.0(@xterm/xterm@6.0.0)
       '@xterm/addon-webgl':
         specifier: 'catalog:'
-        version: 0.18.0(@xterm/xterm@5.5.0)
+        version: 0.18.0(@xterm/xterm@6.0.0)
       '@xterm/xterm':
         specifier: 'catalog:'
-        version: 5.5.0
+        version: 6.0.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2209,8 +2209,8 @@ packages:
     peerDependencies:
       '@xterm/xterm': ^5.0.0
 
-  '@xterm/xterm@5.5.0':
-    resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
+  '@xterm/xterm@6.0.0':
+    resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -7130,19 +7130,19 @@ snapshots:
 
   '@vscode/l10n@0.0.18': {}
 
-  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
+  '@xterm/addon-fit@0.10.0(@xterm/xterm@6.0.0)':
     dependencies:
-      '@xterm/xterm': 5.5.0
+      '@xterm/xterm': 6.0.0
 
-  '@xterm/addon-search@0.15.0(@xterm/xterm@5.5.0)':
+  '@xterm/addon-search@0.15.0(@xterm/xterm@6.0.0)':
     dependencies:
-      '@xterm/xterm': 5.5.0
+      '@xterm/xterm': 6.0.0
 
-  '@xterm/addon-webgl@0.18.0(@xterm/xterm@5.5.0)':
+  '@xterm/addon-webgl@0.18.0(@xterm/xterm@6.0.0)':
     dependencies:
-      '@xterm/xterm': 5.5.0
+      '@xterm/xterm': 6.0.0
 
-  '@xterm/xterm@5.5.0': {}
+  '@xterm/xterm@6.0.0': {}
 
   accepts@2.0.0:
     dependencies:
