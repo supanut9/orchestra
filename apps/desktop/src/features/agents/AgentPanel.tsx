@@ -8,6 +8,7 @@ import { streamMessage } from '@/lib/ai/provider-registry';
 import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
 import { persistConversationTurn } from '@/lib/ai/memory-bridge';
 import { isCliProvider } from '@/stores/settings';
+import { ptyList } from '@/lib/ipc/pty';
 import { ChatMessage } from './ChatMessage';
 import { ShellToolCard } from './ShellToolCard';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
@@ -116,6 +117,27 @@ export function AgentPanel() {
       // wire shell calls into the CLI prompt in a later sprint.
       const useTools = shellEnabled && !isCliProvider(config);
 
+      // Look up PTYs the user has already handed to this agent session.
+      // We surface them to the model via the system prompt so it knows it
+      // can pass targetPtyId to the shell tool instead of spawning a fresh one.
+      let attachedSystem: string | undefined;
+      try {
+        const all = await ptyList();
+        const attached = all.filter(
+          (p) => p.owner.kind === 'agent' && p.owner.sessionId === sessionId,
+        );
+        if (attached.length > 0) {
+          const lines = attached.map(
+            (p) => `- ptyId="${p.id}" label="${p.label}" cwd="${p.cwd}" status="${p.status}"`,
+          );
+          attachedSystem =
+            `The user has handed you the following terminal(s). When you use the shell tool, ` +
+            `pass targetPtyId to run commands inside one of them so the user can watch:\n${lines.join('\n')}`;
+        }
+      } catch (err) {
+        console.warn('[AgentPanel] pty_list lookup failed:', err);
+      }
+
       if (useTools) {
         // Tool-enabled path: import shellTool lazily to avoid loading it before needed
         const { shellTool } = await import('@orchestra/ai-runtime');
@@ -146,6 +168,7 @@ export function AgentPanel() {
         await streamWithTools({
           config,
           messages: allMessages,
+          ...(attachedSystem ? { system: attachedSystem } : {}),
           tools,
           onChunk: captureOnChunk,
           signal,

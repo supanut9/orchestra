@@ -297,6 +297,8 @@ export function createShellRunner(
 export async function streamWithTools(opts: {
   config: ProviderConfig;
   messages: { role: 'user' | 'assistant'; content: string }[];
+  /** Optional system prompt. Threaded through to the Vercel AI SDK as-is. */
+  system?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tools: Record<string, any>;
   onChunk: (chunk: string) => void;
@@ -320,6 +322,7 @@ export async function streamWithTools(opts: {
     messages: opts.messages,
     tools: opts.tools,
     maxSteps: 5,
+    ...(opts.system ? { system: opts.system } : {}),
     ...(opts.signal ? { abortSignal: opts.signal } : {}),
   });
 
