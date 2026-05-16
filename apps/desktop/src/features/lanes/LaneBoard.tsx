@@ -3,7 +3,7 @@ import { Wand2, Trash2 } from 'lucide-react';
 
 import { useLanesStore } from '@/stores/lanes';
 import { useCurrentWorkspace } from '@/stores/workspace';
-import { useSettingsStore } from '@/stores/settings';
+import { useSettingsStore, isCliProvider } from '@/stores/settings';
 import { getProviderModel } from '@/lib/ai/provider-registry';
 import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
 import { LaneCard } from './LaneCard';
@@ -27,8 +27,11 @@ export function LaneBoard() {
     try {
       const { Coordinator } = await import('@orchestra/ai-runtime');
       // Build a Coordinator wired to the active provider so decomposition uses
-      // the real LLM. Falls back to mock lanes only when no provider is set.
-      const model = activeConfig ? await getProviderModel(activeConfig) : undefined;
+      // the real LLM. CLI providers (claude-cli / codex-cli / gemini-cli) don't
+      // expose a Vercel AI SDK LanguageModel, so we fall back to mock lanes for
+      // those until CLI-shelled decomposition lands.
+      const canUseModel = !!activeConfig && !isCliProvider(activeConfig);
+      const model = canUseModel ? await getProviderModel(activeConfig!) : undefined;
       const coordinator = new Coordinator(model ? { model } : {});
       const plans = await coordinator.decomposeTask(goal);
       addLanes(plans.map((p) => ({ id: p.id, title: p.title, description: p.description })));
@@ -45,7 +48,11 @@ export function LaneBoard() {
   // Tool-enabled lane runner: the agent gets a shell tool bound to the
   // lane's own bash PTY (via targetPtyId in the system prompt) so the user
   // can watch every command execute in the lane card's MiniTerminal.
-  const laneStream = activeConfig
+  //
+  // Skipped for CLI providers — they don't go through the Vercel AI SDK so
+  // streamWithTools won't work. The worktree + bash still get spawned so the
+  // user can drive the lane manually.
+  const laneStream = activeConfig && !isCliProvider(activeConfig)
     ? async (
         prompt: string,
         ptyId: string,
