@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileTree } from '@/features/workspace/FileTree';
 import { OpenWorkspaceButton } from '@/features/workspace/OpenWorkspaceButton';
 import { WorkspaceSwitcher } from '@/features/workspace/WorkspaceSwitcher';
@@ -20,10 +20,51 @@ import { cn } from '@/lib/utils';
 
 type BottomTab = 'terminal' | 'services' | 'lanes' | 'mcp' | 'skills' | 'memory';
 
+const BOTTOM_HEIGHT_KEY = 'orchestra.bottomPanel.height';
+const BOTTOM_HEIGHT_DEFAULT = 288; // matches old h-72 (18rem @ 16px)
+const BOTTOM_HEIGHT_MIN = 80;
+const BOTTOM_HEIGHT_MAX_RATIO = 0.85; // max % of viewport height
+
+function loadBottomHeight(): number {
+  if (typeof window === 'undefined') return BOTTOM_HEIGHT_DEFAULT;
+  const raw = window.localStorage.getItem(BOTTOM_HEIGHT_KEY);
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n >= BOTTOM_HEIGHT_MIN ? n : BOTTOM_HEIGHT_DEFAULT;
+}
+
 export function App() {
   const currentWorkspace = useCurrentWorkspace();
   const [bottomTab, setBottomTab] = useState<BottomTab>('terminal');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [bottomHeight, setBottomHeight] = useState<number>(() => loadBottomHeight());
+  const draggingRef = useRef(false);
+
+  useEffect(() => {
+    window.localStorage.setItem(BOTTOM_HEIGHT_KEY, String(bottomHeight));
+  }, [bottomHeight]);
+
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const maxH = window.innerHeight * BOTTOM_HEIGHT_MAX_RATIO;
+      const next = Math.min(Math.max(window.innerHeight - ev.clientY, BOTTOM_HEIGHT_MIN), maxH);
+      setBottomHeight(next);
+    };
+    const onUp = () => {
+      draggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
 
   const openFiles = useWorkspaceStore((s) => s.openFiles);
   const setActiveFile = useWorkspaceStore((s) => s.setActiveFile);
@@ -101,7 +142,19 @@ export function App() {
             <Editor />
           </div>
 
-          <div className="h-72 shrink-0 border-t border-[hsl(var(--border))]">
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            onMouseDown={startResize}
+            onDoubleClick={() => setBottomHeight(BOTTOM_HEIGHT_DEFAULT)}
+            className="h-1 shrink-0 cursor-row-resize bg-[hsl(var(--border))] hover:bg-[hsl(var(--accent))] transition-colors"
+            title="Drag to resize · double-click to reset"
+          />
+
+          <div
+            className="shrink-0 border-t border-[hsl(var(--border))]"
+            style={{ height: `${bottomHeight}px` }}
+          >
             <div className="flex h-8 items-center gap-0 overflow-x-auto border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-2">
               <BottomTabButton
                 active={bottomTab === 'terminal'}
