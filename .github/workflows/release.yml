@@ -86,17 +86,14 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code-signing env vars — configure in GitHub repository secrets
-          # macOS
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Code-signing is intentionally skipped for v0.1 — the workflow
+          # ships unsigned artifacts. macOS users right-click → Open on first
+          # launch; Windows users accept the SmartScreen warning. Signed
+          # builds will be reintroduced post-v0.1 once we have an Apple
+          # Developer ID + Windows certificate. Configure the relevant
+          # secrets (APPLE_CERTIFICATE, APPLE_SIGNING_IDENTITY, APPLE_ID,
+          # APPLE_PASSWORD, APPLE_TEAM_ID, TAURI_SIGNING_PRIVATE_KEY,
+          # TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and re-add them here.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Orchestra ${{ github.ref_name }}
