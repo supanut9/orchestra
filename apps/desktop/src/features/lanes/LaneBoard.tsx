@@ -4,7 +4,7 @@ import { Wand2, Trash2 } from 'lucide-react';
 import { useLanesStore } from '@/stores/lanes';
 import { useCurrentWorkspace } from '@/stores/workspace';
 import { useSettingsStore } from '@/stores/settings';
-import { streamMessage } from '@/lib/ai/provider-registry';
+import { getProviderModel, streamMessage } from '@/lib/ai/provider-registry';
 import { LaneCard } from './LaneCard';
 
 export function LaneBoard() {
@@ -25,7 +25,10 @@ export function LaneBoard() {
     setError(null);
     try {
       const { Coordinator } = await import('@orchestra/ai-runtime');
-      const coordinator = new Coordinator();
+      // Build a Coordinator wired to the active provider so decomposition uses
+      // the real LLM. Falls back to mock lanes only when no provider is set.
+      const model = activeConfig ? await getProviderModel(activeConfig) : undefined;
+      const coordinator = new Coordinator(model ? { model } : {});
       const plans = await coordinator.decomposeTask(goal);
       addLanes(plans.map((p) => ({ id: p.id, title: p.title, description: p.description })));
     } catch (err) {
