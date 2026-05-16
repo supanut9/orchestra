@@ -185,7 +185,9 @@ impl PtyManager {
         let ptys_arc = Arc::clone(&self.ptys);
         let app_for_task = app_handle.clone();
 
-        tokio::task::spawn_blocking(move || {
+        // Use tauri's async runtime — always available regardless of whether
+        // the caller is inside a tokio::main runtime context.
+        tauri::async_runtime::spawn_blocking(move || {
             let mut buf = [0u8; 4096];
             loop {
                 match reader.read(&mut buf) {
