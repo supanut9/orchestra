@@ -1,0 +1,40 @@
+---
+title: Service Orchestrator
+description: One click to start every microservice in your project.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Service Orchestrator is Orchestra's answer to the "eight terminals before you can write a line of code" problem. Instead of manually opening terminals and running each service by hand, you describe your project's services once and Orchestra starts them all in a labeled terminal grid with a single click.
+
+## Supported config formats
+
+Orchestra detects and parses service definitions from:
+
+- `docker-compose.yml` / `docker-compose.yaml` — standard Docker Compose v2/v3 service blocks
+- `Procfile` — Heroku-style `<name>: <command>` per line
+- `orchestra.yaml` — Orchestra's own format (superset of Procfile with health-check and env support)
+- `package.json` `scripts` — opt-in by listing script names in `orchestra.yaml`
+
+<Aside type="note">
+Support for Turborepo `turbo.json` pipelines and `nx.json` is planned for v0.2.
+</Aside>
+
+## How it works
+
+When you open a workspace folder, Orchestra scans the root for a known config file. Detected services appear in the **Services** panel. Each row shows:
+
+- Service name and command
+- Current status: `stopped`, `starting`, `running`, `exited`, `crashed`
+- Last log line (expandable)
+- CPU / memory mini-chart (optional, requires Docker stats API)
+
+Clicking **Run All** starts every service in dependency order. Each service gets its own PTY in the shared terminal pool — see [Shared PTY](/orchestra/concepts/shared-pty/) for how the terminal ownership model works.
+
+## Screenshot placeholder
+
+_Screenshot: Service dashboard with three microservices running — `api`, `worker`, `postgres`_
+
+## AI agent attachment
+
+Any running service terminal can be claimed by an AI agent session. Click **Attach AI** on a service row to spawn an agent bound to that PTY. The agent can read logs, run commands, and restart the process — all visible live in the terminal tab.

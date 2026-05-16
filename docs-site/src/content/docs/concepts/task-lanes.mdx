@@ -1,0 +1,57 @@
+---
+title: Task Lanes
+description: Slice one goal into N parallel agent lanes, each with its own worktree, agent, and terminal.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Task Lanes are Orchestra's third key differentiator. Instead of handing a large goal to a single agent and hoping for the best, the Lane Board lets you decompose the goal into independent parallel tracks — each running in isolation but all visible at a glance.
+
+## How decomposition works
+
+The `Coordinator` in `packages/ai-runtime/src/coordinator.ts` calls the configured language model via `generateObject` (Vercel AI SDK structured output) and asks it to propose up to N lanes for the goal. The response is validated against a Zod schema, so you always get well-typed `LanePlan` objects back.
+
+```ts
+// Simplified coordinator usage
+const coordinator = new Coordinator({ model: myModel, maxLanes: 4 });
+const lanes = await coordinator.decomposeTask('Add OAuth2 login with Google');
+// → [
+//     { id: '...', title: 'Backend OAuth2 endpoints', dependsOn: [] },
+//     { id: '...', title: 'Frontend login button + callback', dependsOn: [] },
+//     { id: '...', title: 'Session & token storage', dependsOn: [] },
+//     { id: '...', title: 'Tests & docs', dependsOn: [] },
+//   ]
+```
+
+<Aside type="note">
+When no model is configured the coordinator returns three generic mock lanes so the Lane Board UI remains usable offline.
+</Aside>
+
+## What each lane gets
+
+<Steps>
+1. **Git worktree** — `git worktree add .orchestra/worktrees/<lane-id>` creates an isolated checkout at the current branch HEAD. Changes in one lane never bleed into another.
+
+2. **AI agent session** — A dedicated `AgentSession` from `ai-runtime` with its own conversation history and memory thread.
+
+3. **Shared PTY** — A terminal in the pool (owned by the agent) so you can watch commands execute live.
+
+4. **Live diff view** — A file-change watcher on the worktree root streams a real-time diff of everything the agent has modified.
+</Steps>
+
+## Merging and discarding
+
+When a lane finishes (or you decide it's not useful), two buttons appear:
+
+- **Merge to main** — opens a standard merge/rebase UI, then removes the worktree.
+- **Discard** — removes the worktree and the branch without merging.
+
+Merging is a serialised human action to prevent worktree race conditions.
+
+## Screenshot placeholder
+
+_Screenshot: Lane Board with three lanes in progress — one merged (green), one running (blue spinner), one awaiting review (amber)_
+
+## Sprint 4 roadmap
+
+The current coordinator makes a single LLM call. Sprint 4 will add a two-pass `@langchain/langgraph` StateGraph: a `critique` node validates the dependency graph and flags missing test lanes, and a `refine` node folds the feedback back in before the lanes are shown to the user.

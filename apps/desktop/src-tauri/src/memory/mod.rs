@@ -1,11 +1,24 @@
-#![allow(dead_code, unused_variables)]
-//! Local memory store — Lane C implementation target.
-//!
-//! TODO Lane C: implement sqlite-vec backed memory store with:
-//!   - Tables: `project_memory`, `user_memory`, `session_memory`
-//!   - Semantic search via sqlite-vec vector similarity
-//!   - CRUD operations exposed through `crate::ipc::{memory_query, memory_insert}`
-//!   - Optional cloud sync (off by default, privacy-first)
-//!
-//! The `rusqlite` crate is already in Cargo.toml with the "bundled" feature
-//! so no system SQLite installation is required.
+pub mod commands;
+pub mod schema;
+pub mod store;
+
+pub use store::MemoryStore;
+
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+/// Tauri-managed state holding per-workspace SQLite connections.
+///
+/// Register with `.manage(memory::MemoryState::default())` in `lib.rs`.
+pub struct MemoryState {
+    /// Open stores keyed by absolute workspace path; opened lazily on first use.
+    pub stores: Mutex<std::collections::HashMap<PathBuf, MemoryStore>>,
+}
+
+impl Default for MemoryState {
+    fn default() -> Self {
+        Self {
+            stores: Mutex::new(Default::default()),
+        }
+    }
+}

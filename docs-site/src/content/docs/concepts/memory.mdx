@@ -1,0 +1,43 @@
+---
+title: Memory
+description: Per-project, per-user, and per-session memory stored locally with semantic search.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Orchestra ships with a local-first memory system built on SQLite + `sqlite-vec`. Agents can store and retrieve facts, decisions, and conversation snippets without sending anything to a third-party service.
+
+## Memory scopes
+
+| Scope | Storage | Example |
+|-------|---------|---------|
+| `project_memory` | Shared across all sessions in a workspace | "We use Postgres 16, not MySQL." |
+| `user_memory` | Shared across all workspaces for this user | "I prefer 2-space indentation." |
+| `session_memory` | Scoped to a single agent session | "The user asked me to skip the tests this time." |
+
+## How it works
+
+The Rust backend owns the SQLite file (`.orchestra/memory.db` per workspace for project memory, `~/.config/orchestra/memory.db` for user memory). The `packages/memory/` Node.js package exposes a facade that calls Tauri IPC commands to read and write records — the raw database is never opened from JavaScript.
+
+Semantic search is powered by `sqlite-vec`: text is embedded at write time using a local embedding model (no API key required) and stored as a vector alongside the text. Queries return the top-K most relevant memories ranked by cosine similarity.
+
+<Aside type="tip">
+Memory is off by default for new workspaces. Enable it in **Settings → Memory** to start accumulating context across sessions.
+</Aside>
+
+## Memory Hub GUI
+
+The **Memory** panel lets you:
+
+- Browse all stored memories by scope and date
+- Edit or delete individual entries
+- Search memories using natural language
+- Export memories to a JSON file for backup or migration
+
+## Screenshot placeholder
+
+_Screenshot: Memory Hub showing the project memory tab with 12 entries — filtered to show only entries containing "database"_
+
+## Privacy and cloud sync
+
+All memory is stored locally by default. Optional cloud sync (disabled by default) will be available post-v0.1 via an encrypted, user-controlled backend. Orchestra will never send memory to AI provider APIs — memories are injected into the system prompt locally before the request leaves your machine.

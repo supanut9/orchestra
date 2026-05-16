@@ -1,0 +1,99 @@
+---
+title: Architecture Overview
+description: High-level structure of the Orchestra desktop application.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+For technology decisions and their rationale see `docs/adr/0001-stack-decisions.md`. For the IPC contract between the UI and the Rust backend see `docs/adr/0002-ipc-contract.md`.
+
+## Bird's-eye view
+
+Orchestra is a Tauri 2 application — a Rust binary that embeds a WebView for the React UI and exposes a typed command/event IPC bridge.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  React 19 UI (WebView / WKWebView / WebView2)                │
+│                                                              │
+│  features/editor      CodeMirror 6                           │
+│  features/terminal    xterm.js + WebGL addon, tab grid       │
+│  features/services    Service dashboard (start/stop/health)  │
+│  features/lanes       Parallel task-lane board               │
+│  features/agents      Chat UI, model picker                  │
+│  features/mcp         MCP server manager GUI                 │
+│  features/skills      SKILL.md manager GUI                   │
+│  features/memory      Memory hub GUI                         │
+│                                                              │
+│  lib/ipc/  ← TYPED INTEGRATION BOUNDARY →                    │
+└──────────────────────┬───────────────────────────────────────┘
+                       │ Tauri IPC (commands + events + raw channel)
+┌──────────────────────▼───────────────────────────────────────┐
+│  Rust Backend  (src-tauri/src/)                              │
+│                                                              │
+│  pty/      Shared PTY pool (portable-pty 0.9)                │
+│  fs/       File watcher (notify-rs 8.2)                      │
+│  git/      Worktree management (git2 / gix)                  │
+│  services/ docker-compose / Procfile / orchestra.yaml parser │
+│  memory/   sqlite-vec store (rusqlite)                       │
+│  ipc/      Tauri command handlers + event emitters           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The `packages/` layer (Node.js) is imported by the React process and handles all AI logic:
+
+| Package | Responsibility |
+|---------|---------------|
+| `ai-runtime` | Vercel AI SDK provider registry, agent loop, LangGraph coordinator |
+| `mcp-client` | MCP server lifecycle, hot-reload, per-project config |
+| `memory` | sqlite-vec facade (reads Rust-owned DB file) |
+| `skills` | SKILL.md parser + system-prompt injector |
+
+## Shared PTY model
+
+A PTY in Orchestra is not owned exclusively by one consumer. Each record in the pool carries:
+
+```
+id:     string (UUID)
+label:  string  ("api-server", "lane-2-agent")
+owner:  "user" | "agent:<sessionId>"
+cwd:    string  (absolute path, usually a worktree root)
+status: "idle" | "running" | "exited" | "crashed"
+buffer: ring buffer (last N lines, Rust-side)
+```
+
+Raw terminal bytes bypass JSON serialisation via Tauri's `Channel<Vec<u8>>`. Multiple UI panes can tail the same PTY simultaneously — the read fan-out happens in Rust before the event is emitted.
+
+## Parallel task lanes
+
+```
+User goal
+    │
+    ▼
+coordinator.ts  (decompose via generateObject)
+    │
+[ lane-1 spec, lane-2 spec, lane-3 spec ]
+    │
+    ├── lane-1:  git worktree add .orchestra/worktrees/lane-1
+    │            claim PTY (pty/manager.rs)
+    │            spawn AI agent session (ai-runtime)
+    │            stream diffs (git status watcher)
+    │
+    └── lane-N:  (same structure)
+```
+
+Each lane is fully independent. Merging to main is a serialised human action to avoid worktree race conditions.
+
+## Data flow
+
+| Data type | Transport | Format |
+|-----------|-----------|--------|
+| Terminal bytes | Tauri raw Channel | `Vec<u8>` (no encoding) |
+| Structured events | Tauri events | JSON (serde) |
+| Tauri commands | Tauri IPC invoke | JSON (serde) |
+| AI streaming responses | Vercel AI SDK ReadableStream | SSE (in-process) |
+| SQLite (memory, state) | Rust rusqlite | Binary file on disk |
+| MCP messages | stdio / SSE (child procs) | JSON-RPC 2.0 |
+
+<Aside type="tip">
+The IPC boundary in `lib/ipc/` (TypeScript) mirrors Rust structs via `tauri-specta` / `ts-rs`. Always update both sides together.
+</Aside>

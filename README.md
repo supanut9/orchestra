@@ -2,6 +2,14 @@
 
 > An open-source, model-agnostic desktop IDE for the AI-orchestration era.
 
+## Docs
+
+Full documentation: **https://supanut9.github.io/orchestra**
+
+_(GitHub Pages activates on the first push to `main` that touches `docs-site/` or `docs/`.)_
+
+---
+
 Orchestra is built for developers who _conduct_ AI agents instead of typing most of the code themselves. It bundles three things no other tool combines today:
 
 1. **Service Orchestrator Dashboard** — one config (`docker-compose.yml`, `Procfile`, or `orchestra.yaml`), one click to spin up every microservice, each in its own labeled terminal tab with health and log filtering.

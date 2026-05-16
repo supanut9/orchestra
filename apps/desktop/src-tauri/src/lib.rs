@@ -1,6 +1,7 @@
 pub mod fs;
 pub mod git;
 pub mod ipc;
+pub mod mcp;
 pub mod memory;
 pub mod pty;
 pub mod services;
@@ -20,6 +21,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(fs::FsState::new())
         .manage(pty::PtyState::default())
+        .manage(memory::MemoryState::default())
+        .manage(mcp::MCPState::default())
         .invoke_handler(tauri::generate_handler![
             // File system (Lane A)
             fs::commands::fs_open_workspace,
@@ -46,9 +49,18 @@ pub fn run() {
             git::commands::git_worktree_list,
             git::commands::git_worktree_diff,
             git::commands::git_worktree_merge,
-            // Memory + lanes (Sprint 2/3 stubs)
-            ipc::memory_query,
-            ipc::memory_insert,
+            // Memory (Lane G — Sprint 3)
+            memory::commands::memory_init,
+            memory::commands::memory_insert,
+            memory::commands::memory_query,
+            memory::commands::memory_list,
+            memory::commands::memory_update,
+            memory::commands::memory_delete,
+            // MCP host (Lane H — Sprint 3)
+            mcp::commands::mcp_start,
+            mcp::commands::mcp_stop,
+            mcp::commands::mcp_status,
+            // Lanes (Sprint 4 stub)
             ipc::list_lanes,
         ])
         .run(tauri::generate_context!())

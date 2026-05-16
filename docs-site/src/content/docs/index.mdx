@@ -1,0 +1,52 @@
+---
+title: Orchestra
+description: An open-source, model-agnostic desktop IDE for the AI-orchestration era.
+template: splash
+hero:
+  tagline: Conduct AI agents instead of typing the code yourself.
+  image:
+    file: ../../../public/favicon.svg
+  actions:
+    - text: Get started
+      link: /orchestra/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/supanut9/orchestra
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why Orchestra?
+
+Modern AI-driven development has outgrown the IDE-as-editor model. Orchestra bundles three things no other tool combines today:
+
+<CardGrid stagger>
+  <Card title="Service Orchestrator" icon="rocket">
+    One config (`docker-compose.yml`, `Procfile`, or `orchestra.yaml`), one click to spin up every
+    microservice — each in a labeled terminal tab with health monitoring and log filtering.
+  </Card>
+  <Card title="Shared-PTY Agent Terminals" icon="terminal">
+    When an AI agent runs a shell command, that terminal is a live interactive tab you can watch,
+    type into, and interrupt. No more hidden subprocess outputs.
+  </Card>
+  <Card title="Parallel Task Lanes" icon="puzzle">
+    Slice one goal into N independent agent lanes, each with its own git worktree, AI session,
+    terminal, and diff view. Merge what works — discard what doesn't.
+  </Card>
+  <Card title="Model-agnostic AI runtime" icon="setting">
+    Claude, OpenAI, Gemini, Ollama, and OpenRouter supported out of the box via the Vercel AI SDK.
+    Switch models per lane without touching code.
+  </Card>
+</CardGrid>
+
+## Status
+
+Pre-alpha. The three key demos are being built in Sprint 2:
+
+1. "Run All Services" — labeled terminal grid lights up.
+2. Agent claims a terminal, runs `npm test`, human watches and intervenes.
+3. "Slice this goal" — 3 worktrees, 3 agents, 3 PTYs, side-by-side diffs.
+
+See [ROADMAP.md](https://github.com/supanut9/orchestra/blob/main/ROADMAP.md) for what ships when.

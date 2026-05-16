@@ -1,0 +1,62 @@
+---
+title: Skills
+description: SKILL.md files inject reusable behaviours into any AI agent, regardless of provider.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Orchestra implements the **SKILL.md** format — an emerging open standard (adopted by 32+ tools as of May 2026) that lets you write reusable agent behaviours as plain Markdown files and inject them into any AI provider's system prompt automatically.
+
+## What is a skill?
+
+A skill is a `SKILL.md` file that describes a behaviour or constraint you want every agent in your workspace to follow. Examples:
+
+- "Always write tests in Vitest, not Jest."
+- "When modifying a Rust file, run `cargo clippy` after every change."
+- "This project follows the Conventional Commits specification."
+
+Because skills are plain Markdown, they are readable by humans, version-controlled with your repo, and completely model-agnostic.
+
+## Skill resolution order
+
+`packages/skills/` applies skills in this priority order (later entries win):
+
+1. **Global skills** — `~/.config/orchestra/skills/` (applies to every workspace)
+2. **Workspace skills** — `.orchestra/skills/` in the project root
+3. **Lane-level skills** — `.orchestra/worktrees/<lane-id>/SKILL.md` (per-lane overrides)
+
+## Using the Skills GUI
+
+The **Skills** panel lists all active skills and lets you:
+
+- Enable or disable individual skills per session
+- Preview the injected system prompt text
+- Create new skill files from templates
+- Import skills from the community registry
+
+<Aside type="note">
+Disabling a skill only affects new agent turns — the current message is already in-flight with the previous system prompt.
+</Aside>
+
+## Screenshot placeholder
+
+_Screenshot: Skills panel showing four active skills — "Conventional Commits", "Vitest", "TypeScript strict mode", and a custom "API security checklist"_
+
+## Skill format
+
+```markdown
+---
+name: Conventional Commits
+description: Enforce the Conventional Commits 1.0 specification for all git commits.
+version: 1.0.0
+---
+
+All git commit messages MUST follow the Conventional Commits 1.0.0 specification:
+
+  <type>[optional scope]: <description>
+
+Valid types: feat, fix, docs, style, refactor, perf, test, chore, ci, build.
+...
+```
+
+The frontmatter is parsed by `packages/skills/src/parser.ts` and the body is appended to the agent system prompt.

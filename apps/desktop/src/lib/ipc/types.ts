@@ -68,18 +68,7 @@ export interface Lane {
   createdAt: string; // ISO-8601
 }
 
-// ── Memory ─────────────────────────────────────────────────────────────────
-
-export type MemoryScope = 'project' | 'user' | 'session';
-
-export interface MemoryRecord {
-  id: string;
-  scope: MemoryScope;
-  content: string;
-  embedding: number[] | null;
-  createdAt: string; // ISO-8601
-  updatedAt: string;
-}
+// Memory types live in `./memory.ts` (real implementation as of Sprint 3).
 
 // ── Agent ──────────────────────────────────────────────────────────────────
 

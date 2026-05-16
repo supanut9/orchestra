@@ -20,3 +20,9 @@ export type { DetectedService, ServiceSource } from './services';
 
 // Lane E — git worktree management.
 export * from './git';
+
+// Lane G — Memory Hub (Sprint 3).
+export * from './memory';
+
+// Lane H — MCP server lifecycle (Sprint 3).
+export * from './mcp';

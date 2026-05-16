@@ -1,0 +1,22 @@
+{
+  "name": "@orchestra/docs-site",
+  "version": "0.0.0",
+  "description": "Orchestra IDE documentation site — Astro Starlight",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.39.2",
+    "astro": "^6.2.2",
+    "sharp": "^0.34.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "typescript": "^5.7.0"
+  }
+}

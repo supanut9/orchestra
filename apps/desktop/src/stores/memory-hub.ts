@@ -1,22 +1,35 @@
 /**
  * memory-hub.ts — Zustand store for the Memory Hub GUI.
  *
- * Delegates persistence to the existing memory-bridge.ts (frozen). Adds
- * UI-level concerns: scope filtering, search, selection, and CRUD that the
- * bridge itself doesn't expose directly.
+ * Sprint 3: persistence is handled by the Rust backend via Tauri IPC.
+ * The old `resolveStore()` / dynamic `@orchestra/memory` import is gone;
+ * every read/write goes through `src/lib/ipc/memory.ts`.
  *
- * Graceful degradation: if the bridge returns null/empty because better-sqlite3
- * is unavailable, `storeAvailable` is set to false and the UI shows a banner
- * rather than crashing.
+ * Graceful degradation: if `memory_init` fails (e.g. the Tauri runtime is not
+ * available in a Storybook/JSDOM environment) `storeAvailable` is set to false
+ * and the UI shows its "unavailable" banner rather than crashing.
  */
 
 import { create } from 'zustand';
+import {
+  memoryDelete,
+  memoryInit,
+  memoryInsert,
+  memoryList,
+  memoryQuery,
+  memoryUpdate,
+  type MemoryPatch as IpcMemoryPatch,
+  type MemoryRecord as IpcMemoryRecord,
+  type MemoryQueryOpts,
+  type NewMemoryRecord as IpcNewMemoryRecord,
+  type Scope,
+} from '../lib/ipc/memory';
 
 // ---------------------------------------------------------------------------
-// Types mirroring @orchestra/memory (re-declared to avoid Node-only import)
+// Re-export public types so feature modules don't import from ipc directly
 // ---------------------------------------------------------------------------
 
-export type Scope = 'project' | 'user' | 'session';
+export type { Scope } from '../lib/ipc/memory';
 
 export interface MemoryRecord {
   id: string;
@@ -24,9 +37,9 @@ export interface MemoryRecord {
   kind: string;
   content: string;
   metadata: Record<string, unknown>;
+  /** Normalised to a JS Date for UI convenience. */
   createdAt: Date;
   updatedAt: Date;
-  embedding?: number[];
 }
 
 export interface NewMemoryRecord {
@@ -39,7 +52,8 @@ export interface NewMemoryRecord {
 export type MemoryRecordPatch = Partial<Pick<MemoryRecord, 'content' | 'kind' | 'metadata'>>;
 
 // ---------------------------------------------------------------------------
-// State interface
+// State interface — intentionally identical to Sprint 2 so MemoryHub.tsx
+// needs no changes.
 // ---------------------------------------------------------------------------
 
 interface MemoryHubState {
@@ -58,13 +72,13 @@ interface MemoryHubState {
   /** Initialise for a workspace and load records. */
   init: (workspacePath: string | null) => Promise<void>;
 
-  /** Reload records from the bridge. */
+  /** Reload records from the backend. */
   refresh: () => Promise<void>;
 
   /** Select a record for detail view. */
   select: (id: string | null) => void;
 
-  /** Update the search query and re-filter. */
+  /** Update the search query and re-fetch. */
   setSearch: (q: string) => void;
 
   /** Change scope filter. */
@@ -98,11 +112,25 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 
   init: async (workspacePath) => {
     set({ workspacePath, loading: true, error: null, storeAvailable: true });
+
+    if (!workspacePath) {
+      set({ loading: false, storeAvailable: false });
+      return;
+    }
+
+    try {
+      await memoryInit(workspacePath);
+    } catch (err) {
+      set({ loading: false, storeAvailable: false, error: toMessage(err) });
+      return;
+    }
+
     await fetchRecords(workspacePath, get().scopeFilter, get().searchQuery, set);
   },
 
   refresh: async () => {
-    const { workspacePath, scopeFilter, searchQuery } = get();
+    const { workspacePath, scopeFilter, searchQuery, storeAvailable } = get();
+    if (!storeAvailable || !workspacePath) return;
     set({ loading: true, error: null });
     await fetchRecords(workspacePath, scopeFilter, searchQuery, set);
   },
@@ -111,7 +139,6 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 
   setSearch: (q) => {
     set({ searchQuery: q });
-    // Re-filter client-side from cached records when not empty, or re-fetch
     const { workspacePath, scopeFilter } = get();
     fetchRecords(workspacePath, scopeFilter, q, set);
   },
@@ -124,14 +151,16 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 
   insert: async (rec) => {
     const { workspacePath } = get();
+    if (!workspacePath) return;
     set({ loading: true, error: null });
     try {
-      const store = await resolveStore(workspacePath);
-      if (!store) {
-        set({ loading: false, storeAvailable: false });
-        return;
-      }
-      await store.insert(rec);
+      const ipcRec: IpcNewMemoryRecord = {
+        scope: rec.scope,
+        kind: rec.kind,
+        content: rec.content,
+      };
+      if (rec.metadata !== undefined) ipcRec.metadata = rec.metadata;
+      await memoryInsert(workspacePath, ipcRec);
       await get().refresh();
     } catch (err) {
       set({ loading: false, error: toMessage(err) });
@@ -140,14 +169,14 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 
   update: async (id, patch) => {
     const { workspacePath } = get();
+    if (!workspacePath) return;
     set({ loading: true, error: null });
     try {
-      const store = await resolveStore(workspacePath);
-      if (!store) {
-        set({ loading: false, storeAvailable: false });
-        return;
-      }
-      const updated = await store.update(id, patch);
+      const ipcPatch: IpcMemoryPatch = {};
+      if (patch.content !== undefined) ipcPatch.content = patch.content;
+      if (patch.kind !== undefined) ipcPatch.kind = patch.kind;
+      if (patch.metadata !== undefined) ipcPatch.metadata = patch.metadata;
+      const updated = await memoryUpdate(workspacePath, id, ipcPatch);
       set((state) => ({
         loading: false,
         records: state.records.map((r) => (r.id === id ? normaliseRecord(updated) : r)),
@@ -159,14 +188,10 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 
   remove: async (id) => {
     const { workspacePath } = get();
+    if (!workspacePath) return;
     set({ loading: true, error: null });
     try {
-      const store = await resolveStore(workspacePath);
-      if (!store) {
-        set({ loading: false, storeAvailable: false });
-        return;
-      }
-      await store.delete(id);
+      await memoryDelete(workspacePath, id);
       set((state) => ({
         loading: false,
         records: state.records.filter((r) => r.id !== id),
@@ -184,14 +209,6 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function resolveStore(_workspacePath: string | null): Promise<any | null> {
-  // @orchestra/memory depends on better-sqlite3 (native node addon) and can't
-  // be bundled into the Tauri WebView. The Memory Hub UI degrades to its
-  // "unavailable" banner. Real persistence lands in Sprint 3 via a Rust-side
-  // memory IPC module.
-  return null;
-}
-
 type SetFn = (
   partial: Partial<MemoryHubState> | ((s: MemoryHubState) => Partial<MemoryHubState>),
 ) => void;
@@ -202,34 +219,32 @@ async function fetchRecords(
   searchQuery: string,
   set: SetFn,
 ): Promise<void> {
-  try {
-    const store = await resolveStore(workspacePath);
-    if (!store) {
-      set({ loading: false, records: [], storeAvailable: false });
-      return;
-    }
+  if (!workspacePath) {
+    set({ loading: false, records: [], storeAvailable: false });
+    return;
+  }
 
-    let raw: any[];
+  try {
+    let raw: IpcMemoryRecord[];
+
     if (searchQuery.trim()) {
-      raw = await store.query({
+      const opts: MemoryQueryOpts = {
         text: searchQuery,
-        scope: scopeFilter === 'all' ? undefined : scopeFilter,
         topK: 100,
-      });
+      };
+      if (scopeFilter !== 'all') opts.scope = scopeFilter;
+      raw = await memoryQuery(workspacePath, opts);
     } else if (scopeFilter !== 'all') {
-      raw = await store.list(scopeFilter);
+      raw = await memoryList(workspacePath, scopeFilter);
     } else {
-      // Fetch all scopes and merge
+      // Fetch all scopes in parallel and merge, newest first.
       const [project, user, session] = await Promise.all([
-        store.list('project'),
-        store.list('user'),
-        store.list('session'),
+        memoryList(workspacePath, 'project'),
+        memoryList(workspacePath, 'user'),
+        memoryList(workspacePath, 'session'),
       ]);
-      raw = [...project, ...user, ...session];
-      raw.sort(
-        (a: any, b: any) =>
-          new Date(b.updatedAt ?? b.updated_at).getTime() -
-          new Date(a.updatedAt ?? a.updated_at).getTime(),
+      raw = [...project, ...user, ...session].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       );
     }
 
@@ -244,16 +259,16 @@ async function fetchRecords(
   }
 }
 
-function normaliseRecord(r: any): MemoryRecord {
+/** Convert the IPC record (ISO strings) to the store's Date-based shape. */
+function normaliseRecord(r: IpcMemoryRecord): MemoryRecord {
   return {
     id: r.id,
     scope: r.scope,
     kind: r.kind,
     content: r.content,
-    metadata: r.metadata ?? {},
-    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt ?? r.created_at),
-    updatedAt: r.updatedAt instanceof Date ? r.updatedAt : new Date(r.updatedAt ?? r.updated_at),
-    embedding: r.embedding,
+    metadata: (r.metadata as Record<string, unknown>) ?? {},
+    createdAt: new Date(r.createdAt),
+    updatedAt: new Date(r.updatedAt),
   };
 }
 

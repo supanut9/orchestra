@@ -1,0 +1,52 @@
+---
+title: MCP Servers
+description: Manage Model Context Protocol servers per project with hot-reload support.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Orchestra has first-class support for the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP). The `packages/mcp-client/` package wraps `@modelcontextprotocol/sdk v1.29` and provides lifecycle management, per-project configuration, and hot-reload.
+
+## What is MCP?
+
+MCP is an open protocol that lets AI models interact with external tools, data sources, and services through a standardised JSON-RPC 2.0 interface. An MCP server is a lightweight process (stdio or SSE) that exposes typed tools and resources to any MCP-compatible client.
+
+Orchestra ships with an MCP client — the AI agents in every lane can use any MCP server you configure without writing provider-specific integration code.
+
+## Per-project configuration
+
+Each workspace stores its MCP server list in `.orchestra/mcp.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+    },
+    {
+      "name": "github",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    }
+  ]
+}
+```
+
+<Aside type="tip">
+Environment variables in `env` are expanded from your shell environment at startup time — they are never stored in plain text.
+</Aside>
+
+## Hot-reload
+
+Orchestra watches `.orchestra/mcp.json` for changes (via notify-rs on the Rust side). When you save the file, running servers are gracefully stopped and restarted with the new config — no need to quit the app. This mirrors the `mcpmon` pattern used by many MCP-first IDEs.
+
+## GUI marketplace
+
+The **MCP** panel in the sidebar lets you browse community MCP servers, enable / disable servers per workspace, and inspect which tools each server exposes. Enabled tools are automatically injected into agent sessions in the current workspace.
+
+## Screenshot placeholder
+
+_Screenshot: MCP panel showing three servers — filesystem (green, running), github (green, running), postgres (grey, stopped)_

@@ -1,0 +1,51 @@
+---
+title: Shared PTY
+description: Human and AI agent share the same terminal — visible, interruptible, live.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+One of Orchestra's key differentiators is the **Shared PTY model**: AI agents do not get hidden subprocess outputs. Every shell command an agent runs goes through a terminal that you can watch, type into, and interrupt in real time.
+
+## What is a PTY?
+
+A PTY (pseudo-terminal) is the same mechanism your terminal emulator uses to talk to the shell. In Orchestra every PTY has an owner (`user` or `agent:<sessionId>`) but can be tailed by multiple readers simultaneously.
+
+```
+PTY record
+  id:     string   — UUID, stable for the lifetime of the process
+  label:  string   — "api-server", "lane-2-agent", "jest-runner"
+  owner:  "user" | "agent:<sessionId>"
+  cwd:    string   — absolute path (usually a worktree root)
+  status: "idle" | "running" | "exited" | "crashed"
+  buffer: ring buffer (last N lines, kept in Rust)
+```
+
+## Terminal grid
+
+The terminal grid in `features/terminal/` renders one xterm.js instance per PTY. Tabs are colour-coded: **blue** for user-owned terminals, **purple** for agent-owned ones. A split-pane layout lets you watch multiple PTYs side by side.
+
+Raw terminal bytes travel via Tauri's `Channel<Vec<u8>>` — no JSON serialisation overhead on the hot path.
+
+## Intervene mode
+
+When an AI agent is actively writing to a PTY, Orchestra enters **Intervene mode** for that tab. Your keystrokes are forwarded to the same PTY alongside the agent's output. A banner at the top of the tab warns you that both sources are writing simultaneously.
+
+<Aside type="caution">
+Interleaved keystrokes can confuse interactive shell programs. Use Intervene mode to send a quick signal (`Ctrl-C`, `q`) rather than to type long commands while the agent is busy.
+</Aside>
+
+## Screenshot placeholder
+
+_Screenshot: Terminal grid with two agent PTYs and one user PTY — the active agent tab shows the purple "AI" badge and the Intervene mode banner_
+
+## PTY ownership API
+
+Lane B exposes two IPC commands that the AI runtime uses:
+
+| Command | Purpose |
+|---------|---------|
+| `claimPty({ label, ownerId, cwd })` | Allocate a new PTY owned by the caller |
+| `attachPty({ ptyId, readerId })` | Subscribe to output of an existing PTY |
+
+Agent sessions call `claimPty` when they need a shell, and the UI calls `attachPty` to render it.

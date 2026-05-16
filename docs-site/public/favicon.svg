@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Orchestra IDE favicon placeholder — replace with final brand asset -->
+  <circle cx="24" cy="24" r="22" fill="#6366f1"/>
+  <path d="M14 24 C14 18 19 14 24 14 C29 14 34 18 34 24 C34 30 29 34 24 34 C19 34 14 30 14 24Z"
+        stroke="white" stroke-width="2.5" fill="none"/>
+  <!-- Conductor baton -->
+  <line x1="28" y1="16" x2="36" y2="10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="36" cy="10" r="2" fill="white"/>
+</svg>
