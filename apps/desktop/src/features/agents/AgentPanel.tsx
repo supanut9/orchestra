@@ -54,6 +54,12 @@ export function AgentPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /** Stable session ID for this panel mount — used as PTY owner. */
   const sessionIdRef = useRef(`panel-${Date.now()}`);
+  const setCurrentSessionId = useAgentStore((s) => s.setCurrentSessionId);
+
+  // Publish the session ID so TerminalGrid can hand terminals to this agent.
+  useEffect(() => {
+    setCurrentSessionId(sessionIdRef.current);
+  }, [setCurrentSessionId]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {

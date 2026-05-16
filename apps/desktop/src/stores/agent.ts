@@ -46,6 +46,14 @@ interface AgentState {
   /** The AbortController for the current in-flight stream (if any). */
   abortController: AbortController | null;
 
+  // ── Session ────────────────────────────────────────────────────────────────
+  /**
+   * Stable identifier for the current agent session — used as `PtyOwner.sessionId`
+   * when the agent claims a terminal. Set by AgentPanel on mount.
+   */
+  currentSessionId: string;
+  setCurrentSessionId: (id: string) => void;
+
   // ── Shell tool calls ───────────────────────────────────────────────────────
   /** PTY IDs of all shells spawned by the agent this session. */
   activeShellPtyIds: string[];
@@ -115,6 +123,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   isStreaming: false,
   error: undefined,
   abortController: null,
+  currentSessionId: '',
+  setCurrentSessionId: (id) => set({ currentSessionId: id }),
   activeShellPtyIds: [],
   shellToolCalls: {},
 

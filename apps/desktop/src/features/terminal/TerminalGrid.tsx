@@ -17,11 +17,18 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { X, Bot, User } from 'lucide-react';
+import { X, Bot, User, ArrowRightLeft } from 'lucide-react';
 
-import { ptyList, ptyKill, subscribeToPtyStatus, subscribeToPtyOwner } from '@/lib/ipc/pty';
+import {
+  ptyList,
+  ptyKill,
+  ptyClaim,
+  subscribeToPtyStatus,
+  subscribeToPtyOwner,
+} from '@/lib/ipc/pty';
 import type { PtyInfo, PtyStatusPayload, PtyOwnerPayload } from '@/lib/ipc/pty';
 import type { PtyStatus } from '@/lib/ipc/types';
+import { useAgentStore } from '@/stores/agent';
 
 import { Terminal } from './Terminal';
 
@@ -59,9 +66,20 @@ interface TabProps {
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onToggleOwner: () => void;
+  canHandToAI: boolean;
+  ownedByCurrentAgent: boolean;
 }
 
-function Tab({ info, isActive, onSelect, onClose }: TabProps) {
+function Tab({
+  info,
+  isActive,
+  onSelect,
+  onClose,
+  onToggleOwner,
+  canHandToAI,
+  ownedByCurrentAgent,
+}: TabProps) {
   const isAgent = info.owner.kind === 'agent';
 
   return (
@@ -100,6 +118,21 @@ function Tab({ info, isActive, onSelect, onClose }: TabProps) {
         </span>
       )}
 
+      {/* Hand-to-AI / Reclaim toggle */}
+      {(canHandToAI || ownedByCurrentAgent) && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleOwner();
+          }}
+          className="ml-1 rounded hover:bg-[hsl(var(--muted))] p-0.5 shrink-0 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+          title={ownedByCurrentAgent ? 'Reclaim from AI' : 'Hand to AI'}
+          aria-label={ownedByCurrentAgent ? 'Reclaim from AI' : 'Hand to AI'}
+        >
+          <ArrowRightLeft size={10} />
+        </button>
+      )}
+
       {/* Close button */}
       <button
         onClick={(e) => {
@@ -123,6 +156,7 @@ export function TerminalGrid({ ptyIds: externalPtyIds }: TerminalGridProps = {})
   const [activeId, setActiveId] = useState<string | null>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
   const unlistenOwnerRef = useRef<(() => void) | null>(null);
+  const currentSessionId = useAgentStore((s) => s.currentSessionId);
 
   // ── Load initial PTY list ──────────────────────────────────────────────────
 
@@ -203,6 +237,24 @@ export function TerminalGrid({ ptyIds: externalPtyIds }: TerminalGridProps = {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Hand to AI / Reclaim ───────────────────────────────────────────────────
+
+  const handleToggleOwner = useCallback(
+    async (info: PtyInfo) => {
+      const ownedByThisAgent =
+        info.owner.kind === 'agent' && info.owner.sessionId === currentSessionId;
+      try {
+        await ptyClaim(
+          info.id,
+          ownedByThisAgent ? { kind: 'user' } : { kind: 'agent', sessionId: currentSessionId },
+        );
+      } catch (err) {
+        console.error('[TerminalGrid] pty_claim error:', err);
+      }
+    },
+    [currentSessionId],
+  );
+
   // ── Close (kill) a terminal ────────────────────────────────────────────────
 
   const handleClose = useCallback(async (ptyId: string) => {
@@ -238,15 +290,23 @@ export function TerminalGrid({ ptyIds: externalPtyIds }: TerminalGridProps = {})
     <div className="flex flex-col h-full bg-[#0d0d0d]">
       {/* Tab bar */}
       <div className="flex items-center h-8 shrink-0 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] overflow-x-auto scrollbar-none">
-        {ptys.map((info) => (
-          <Tab
-            key={info.id}
-            info={info}
-            isActive={info.id === activeId}
-            onSelect={() => setActiveId(info.id)}
-            onClose={() => void handleClose(info.id)}
-          />
-        ))}
+        {ptys.map((info) => {
+          const ownedByCurrentAgent =
+            info.owner.kind === 'agent' && info.owner.sessionId === currentSessionId;
+          const canHandToAI = !!currentSessionId && info.owner.kind === 'user';
+          return (
+            <Tab
+              key={info.id}
+              info={info}
+              isActive={info.id === activeId}
+              onSelect={() => setActiveId(info.id)}
+              onClose={() => void handleClose(info.id)}
+              onToggleOwner={() => void handleToggleOwner(info)}
+              canHandToAI={canHandToAI}
+              ownedByCurrentAgent={ownedByCurrentAgent}
+            />
+          );
+        })}
       </div>
 
       {/* Terminal panes — only the active one is visible; all are mounted so
