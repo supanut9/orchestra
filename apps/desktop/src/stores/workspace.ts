@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import type { Workspace, WorkspaceFolder, FolderInfo, FileNode } from '@/lib/ipc';
+import { createTauriJSONStorage } from '@/lib/storage';
 
 interface WorkspaceState {
   // ── State ────────────────────────────────────────────────────────────────
@@ -242,6 +243,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     {
       name: 'orchestra-workspace',
       version: 2,
+      // Persist to a Tauri-backed JSON file so workspaces survive WKWebView
+      // localStorage wipes between dev rebuilds.
+      storage: createTauriJSONStorage('orchestra-workspace.json'),
       // Persist workspaces + active id only. Editor / file state is ephemeral.
       partialize: (state) => ({
         workspaces: state.workspaces,
