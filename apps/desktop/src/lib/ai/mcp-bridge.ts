@@ -1,166 +1,126 @@
 /**
  * mcp-bridge.ts
  *
- * Workspace-aware lifecycle wrapper around @orchestra/mcp-client's MCPManager.
- * Config path: <workspace>/.orchestra/mcp.json
+ * Workspace-aware MCP config reader/writer. Uses Tauri's fs plugin to access
+ * `<workspace>/.orchestra/mcp.json` so the bridge stays browser-safe (the
+ * Node-only `@orchestra/mcp-client` `MCPManager` is not bundled into the
+ * renderer).
  *
- * Lazy init: the manager is only created on first use, and re-created when the
- * workspace changes. Persistence uses @tauri-apps/plugin-fs writeTextFile so
- * the config survives restarts and is editable outside the app.
- *
- * In tests (no Tauri runtime) the fs write silently falls back to a no-op.
+ * Server lifecycle (start/stop/restart, listTools) returns mock data here —
+ * real Tauri-backed spawning of MCP server processes lands in Sprint 3 once
+ * the Rust backend has an MCP host module.
  */
 
 import type { MCPServerConfig, MCPServer, MCPTool } from '@orchestra/mcp-client';
 import type { MCPConfig } from '@orchestra/mcp-client';
+import { parseConfig } from '@orchestra/mcp-client';
 
-// ---------------------------------------------------------------------------
-// Internal state
-// ---------------------------------------------------------------------------
+const CONFIG_SUBPATH = '.orchestra/mcp.json';
 
-let currentWorkspacePath: string | null = null;
-let managerInstance: any | null = null; // MCPManager — dynamic import to avoid ESM issues
-let configCache: MCPConfig | null = null;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+let cachedWorkspace: string | null = null;
+let cachedConfig: MCPConfig | null = null;
+let runtimeState: Map<string, MCPServer['status']> = new Map();
 
 function configPath(workspacePath: string): string {
-  return `${workspacePath}/.orchestra/mcp.json`;
+  return `${workspacePath}/${CONFIG_SUBPATH}`;
 }
 
-async function getManager(workspacePath: string): Promise<any> {
-  if (managerInstance && currentWorkspacePath === workspacePath) {
-    return managerInstance;
+async function loadConfig(workspacePath: string): Promise<MCPConfig> {
+  if (cachedConfig && cachedWorkspace === workspacePath) {
+    return cachedConfig;
   }
-
-  // Workspace changed — tear down old instance
-  if (managerInstance) {
-    managerInstance = null;
-    configCache = null;
-  }
-
-  currentWorkspacePath = workspacePath;
-
-  const { MCPManager } = await import('@orchestra/mcp-client');
-  const mgr = new MCPManager();
-
+  cachedWorkspace = workspacePath;
   try {
-    const cfg = await mgr.loadConfig(configPath(workspacePath));
-    configCache = cfg;
-  } catch (err) {
-    // Config file might not exist yet — start empty
-    configCache = { servers: {} };
-    console.info('[mcp-bridge] No mcp.json found, starting with empty config:', err);
+    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+    const raw = await readTextFile(configPath(workspacePath));
+    cachedConfig = parseConfig(JSON.parse(raw));
+  } catch {
+    cachedConfig = { servers: {} };
   }
-
-  managerInstance = mgr;
-  return mgr;
+  return cachedConfig;
 }
 
-async function writeConfig(workspacePath: string, config: MCPConfig): Promise<void> {
-  const json = JSON.stringify(config, null, 2);
+async function persist(workspacePath: string, config: MCPConfig): Promise<void> {
   try {
     const { writeTextFile, mkdir } = await import('@tauri-apps/plugin-fs');
-    const dir = `${workspacePath}/.orchestra`;
-    await mkdir(dir, { recursive: true }).catch(() => {});
-    await writeTextFile(configPath(workspacePath), json);
+    await mkdir(`${workspacePath}/.orchestra`, { recursive: true }).catch(() => {});
+    await writeTextFile(configPath(workspacePath), JSON.stringify(config, null, 2));
+    cachedConfig = config;
   } catch (err) {
-    console.warn(
-      '[mcp-bridge] writeTextFile unavailable (non-Tauri env), skipping disk write:',
-      err,
-    );
+    console.warn('[mcp-bridge] failed to write config:', err);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 export interface MCPServerStatus extends MCPServer {
   tools?: MCPTool[];
 }
 
-/** Return current server list with statuses. Null when no workspace is open. */
-export async function getStatus(workspacePath: string | null | undefined): Promise<MCPServer[]> {
+export async function getStatus(
+  workspacePath: string | null | undefined,
+): Promise<MCPServer[]> {
   if (!workspacePath) return [];
-  try {
-    const mgr = await getManager(workspacePath);
-    return mgr.listServers();
-  } catch (err) {
-    console.warn('[mcp-bridge] getStatus failed:', err);
-    return [];
-  }
+  const config = await loadConfig(workspacePath);
+  return Object.entries(config.servers).map(([id, cfg]) => ({
+    id,
+    config: cfg,
+    status: runtimeState.get(id) ?? 'stopped',
+  }));
 }
 
-/** Start a server. Throws on unknown id. */
-export async function startServer(workspacePath: string, serverId: string): Promise<void> {
-  const mgr = await getManager(workspacePath);
-  await mgr.start(serverId);
+export async function startServer(_workspacePath: string, serverId: string): Promise<void> {
+  runtimeState.set(serverId, 'running');
 }
 
-/** Stop a server. Throws on unknown id. */
-export async function stopServer(workspacePath: string, serverId: string): Promise<void> {
-  const mgr = await getManager(workspacePath);
-  await mgr.stop(serverId);
+export async function stopServer(_workspacePath: string, serverId: string): Promise<void> {
+  runtimeState.set(serverId, 'stopped');
 }
 
-/** Restart a server. */
 export async function restartServer(workspacePath: string, serverId: string): Promise<void> {
-  const mgr = await getManager(workspacePath);
-  await mgr.restart(serverId);
+  await stopServer(workspacePath, serverId);
+  await startServer(workspacePath, serverId);
 }
 
-/** List tools exposed by a server. */
-export async function listTools(workspacePath: string, serverId: string): Promise<MCPTool[]> {
-  const mgr = await getManager(workspacePath);
-  return mgr.listTools(serverId);
+export async function listTools(
+  _workspacePath: string,
+  _serverId: string,
+): Promise<MCPTool[]> {
+  // Real implementation will spawn the server and call MCP `tools/list` over
+  // stdio. Sprint 3.
+  return [];
 }
 
-/** Add a new server to the config and persist. */
 export async function addServer(
   workspacePath: string,
   id: string,
-  serverConfig: MCPServerConfig,
+  config: MCPServerConfig,
 ): Promise<void> {
-  await getManager(workspacePath);
-  if (!configCache) configCache = { servers: {} };
-  configCache = {
-    ...configCache,
-    servers: { ...configCache.servers, [id]: serverConfig },
+  const existing = await loadConfig(workspacePath);
+  const next: MCPConfig = {
+    servers: { ...existing.servers, [id]: config },
   };
-  await saveConfig(workspacePath);
-  // Reload so the manager picks up the new entry
-  managerInstance = null;
-  await getManager(workspacePath);
+  await persist(workspacePath, next);
 }
 
-/** Remove a server from the config and persist. */
 export async function removeServer(workspacePath: string, id: string): Promise<void> {
-  await getManager(workspacePath);
-  if (!configCache) return;
-  const { [id]: _removed, ...rest } = configCache.servers;
-  configCache = { ...configCache, servers: rest };
-  await saveConfig(workspacePath);
-  managerInstance = null;
-  await getManager(workspacePath);
+  const existing = await loadConfig(workspacePath);
+  const { [id]: _removed, ...rest } = existing.servers;
+  const next: MCPConfig = { servers: rest };
+  runtimeState.delete(id);
+  await persist(workspacePath, next);
 }
 
-/** Persist the current in-memory config to disk. */
 export async function saveConfig(workspacePath: string): Promise<void> {
-  if (!configCache) return;
-  await writeConfig(workspacePath, configCache);
+  if (cachedConfig && cachedWorkspace === workspacePath) {
+    await persist(workspacePath, cachedConfig);
+  }
 }
 
-/** Get the raw config (for serialization/display). */
 export function getRawConfig(): MCPConfig | null {
-  return configCache;
+  return cachedConfig;
 }
 
-/** Force re-open on next call (e.g. after external file edit). */
 export function invalidate(): void {
-  managerInstance = null;
-  configCache = null;
-  currentWorkspacePath = null;
+  cachedWorkspace = null;
+  cachedConfig = null;
+  runtimeState = new Map();
 }

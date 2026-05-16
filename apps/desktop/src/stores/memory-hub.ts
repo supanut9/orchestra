@@ -184,20 +184,12 @@ export const useMemoryHubStore = create<MemoryHubState>()((set, get) => ({
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function resolveStore(workspacePath: string | null): Promise<any | null> {
-  try {
-    // memory-bridge exposes getRecentMemory / persistConversationTurn but not
-    // the raw store. We need the store for insert/update/delete, so we
-    // instantiate MemoryStore directly.
-    const { MemoryStore } = await import('@orchestra/memory');
-    const dbPath = workspacePath ? `${workspacePath}/.orchestra/memory.sqlite` : ':memory:';
-    const store = new MemoryStore(dbPath);
-    await store.init();
-    return store;
-  } catch (err) {
-    console.warn('[memory-hub] resolveStore failed:', err);
-    return null;
-  }
+async function resolveStore(_workspacePath: string | null): Promise<any | null> {
+  // @orchestra/memory depends on better-sqlite3 (native node addon) and can't
+  // be bundled into the Tauri WebView. The Memory Hub UI degrades to its
+  // "unavailable" banner. Real persistence lands in Sprint 3 via a Rust-side
+  // memory IPC module.
+  return null;
 }
 
 type SetFn = (

@@ -38,14 +38,10 @@ async function getStore(dbPath: string): Promise<any> {
   if (!initPromise) {
     currentDbPath = dbPath;
     initPromise = (async () => {
-      try {
-        const { MemoryStore } = await import('@orchestra/memory');
-        storeInstance = new MemoryStore(dbPath);
-        await storeInstance.init();
-      } catch (err) {
-        console.warn('[memory-bridge] Could not open MemoryStore:', err);
-        storeInstance = null;
-      }
+      // @orchestra/memory uses better-sqlite3 (native node addon) which can't
+      // run inside the Tauri WebView. Real persistence lands in Sprint 3 via a
+      // Rust-backed memory IPC layer. Until then this is a no-op.
+      storeInstance = null;
     })();
   }
 

@@ -1,11 +1,19 @@
-import { readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { parseSkill } from './parser.js';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { basename, extname, join } from 'node:path';
+import { parseSkillContent } from './parser.js';
 import type { Skill } from './schema.js';
 
 /**
- * Walk `dir` recursively and parse every `SKILL.md` file found.
- * Returns all skills sorted by id.
+ * Parse a SKILL.md file from disk. Node-only (uses fs).
+ */
+export async function parseSkill(filePath: string): Promise<Skill> {
+  const raw = await readFile(filePath, 'utf-8');
+  const stem = basename(filePath, extname(filePath));
+  return parseSkillContent(raw, stem);
+}
+
+/**
+ * Walk `dir` recursively and parse every `SKILL.md` file found. Node-only.
  */
 export async function loadSkills(dir: string): Promise<Skill[]> {
   const skills: Skill[] = [];
@@ -19,7 +27,6 @@ async function walk(dir: string, acc: Skill[]): Promise<void> {
   try {
     entries = await readdir(dir);
   } catch {
-    // Directory might not exist yet — treat as empty
     return;
   }
 
