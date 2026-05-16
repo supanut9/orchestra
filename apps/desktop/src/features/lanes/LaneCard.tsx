@@ -25,7 +25,7 @@ import {
 import { ptySpawn, subscribeToPtyOutput } from '@/lib/ipc/pty';
 import { useLanesStore } from '@/stores/lanes';
 import type { Lane } from '@/stores/lanes';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ export interface LaneCardProps {
 
 export function LaneCard({ lane, streamMessage }: LaneCardProps) {
   const { approveLane, markLaneRunning, markLaneMerged, discardLane, setError } = useLanesStore();
-  const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const currentWorkspace = useCurrentWorkspace();
 
   const [diffs, setDiffs] = useState<FileDiff[]>([]);
   const [isBusy, setIsBusy] = useState(false);
@@ -153,7 +153,7 @@ export function LaneCard({ lane, streamMessage }: LaneCardProps) {
     const poll = async () => {
       if (cancelled) return;
       try {
-        const result = await gitWorktreeDiff(currentWorkspace.path, lane.id);
+        const result = await gitWorktreeDiff(currentWorkspace.folders[0]!.path, lane.id);
         if (!cancelled) setDiffs(result);
       } catch {
         // Silently ignore transient errors; the diff will update on the next poll
@@ -186,7 +186,11 @@ export function LaneCard({ lane, streamMessage }: LaneCardProps) {
 
       // 2. Create git worktree
       const branchName = `orchestra/${lane.id}`;
-      const worktreeInfo = await gitWorktreeAdd(currentWorkspace.path, lane.id, branchName);
+      const worktreeInfo = await gitWorktreeAdd(
+        currentWorkspace.folders[0]!.path,
+        lane.id,
+        branchName,
+      );
 
       // 3. Spawn a PTY in the worktree directory
       const agentSessionId = nanoid();
@@ -243,7 +247,7 @@ export function LaneCard({ lane, streamMessage }: LaneCardProps) {
 
     try {
       if (currentWorkspace && lane.worktreePath) {
-        await gitWorktreeRemove(currentWorkspace.path, lane.id);
+        await gitWorktreeRemove(currentWorkspace.folders[0]!.path, lane.id);
       }
       discardLane(lane.id);
     } catch (err) {
@@ -268,7 +272,7 @@ export function LaneCard({ lane, streamMessage }: LaneCardProps) {
     setLocalError(null);
 
     try {
-      await gitWorktreeMerge(currentWorkspace.path, lane.id, 'main');
+      await gitWorktreeMerge(currentWorkspace.folders[0]!.path, lane.id, 'main');
       markLaneMerged(lane.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

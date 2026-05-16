@@ -7,17 +7,21 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { Workspace, FileNode } from './types';
+import type { FolderInfo, FileNode } from './types';
 import type { FsChangePayload } from './events';
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 /**
- * Open a folder as a workspace.  Returns a `Workspace` with a deterministic
- * ID derived from the path (same folder → same ID across sessions).
+ * Open a folder. Returns folder metadata (id, name, path, openedAt).
+ * The TS workspace store decides whether this folder becomes the first folder
+ * in a new workspace, or gets added to an existing workspace.
+ *
+ * Note: the Rust command is still called `fs_open_workspace` for compatibility;
+ * the "workspace" concept moved into the TS layer in Sprint 4.
  */
-export function fsOpenWorkspace(path: string): Promise<Workspace> {
-  return invoke<Workspace>('fs_open_workspace', { path });
+export function fsOpenWorkspace(path: string): Promise<FolderInfo> {
+  return invoke<FolderInfo>('fs_open_workspace', { path });
 }
 
 /**

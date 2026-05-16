@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FileTree } from '@/features/workspace/FileTree';
 import { OpenWorkspaceButton } from '@/features/workspace/OpenWorkspaceButton';
+import { WorkspaceSwitcher } from '@/features/workspace/WorkspaceSwitcher';
 import { Editor } from '@/features/editor/Editor';
 import { AgentPanel } from '@/features/agents/AgentPanel';
 import { TerminalGrid } from '@/features/terminal/TerminalGrid';
@@ -9,13 +10,13 @@ import { LaneBoard } from '@/features/lanes/LaneBoard';
 import { MCPManager } from '@/features/mcp/MCPManager';
 import { SkillManager } from '@/features/skills/SkillManager';
 import { MemoryHub } from '@/features/memory/MemoryHub';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
 type BottomTab = 'terminal' | 'services' | 'lanes' | 'mcp' | 'skills' | 'memory';
 
 export function App() {
-  const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const _currentWorkspace = useCurrentWorkspace();
   const [bottomTab, setBottomTab] = useState<BottomTab>('terminal');
 
   return (
@@ -24,15 +25,7 @@ export function App() {
         <span className="text-sm font-semibold tracking-wide">Orchestra</span>
         <span className="text-xs text-[hsl(var(--muted-foreground))]">— AI-native IDE</span>
         <div className="ml-auto flex items-center gap-2 text-xs">
-          {currentWorkspace ? (
-            <span className="rounded bg-[hsl(var(--muted))] px-2 py-0.5">
-              {currentWorkspace.name}
-            </span>
-          ) : (
-            <span className="rounded bg-[hsl(var(--muted))] px-2 py-0.5 text-[hsl(var(--muted-foreground))]">
-              No workspace open
-            </span>
-          )}
+          <WorkspaceSwitcher />
           <OpenWorkspaceButton />
         </div>
       </header>

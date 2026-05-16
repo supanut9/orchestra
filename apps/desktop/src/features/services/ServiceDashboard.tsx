@@ -25,7 +25,7 @@ import { ptyKill, subscribeToPtyStatus } from '@/lib/ipc/pty';
 import type { PtyStatusPayload } from '@/lib/ipc/pty';
 import type { PtyStatus } from '@/lib/ipc/types';
 
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 import { TerminalGrid } from '@/features/terminal/TerminalGrid';
 
 // ── Source badge ───────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ function ServiceRow({
 // ── ServiceDashboard ────────────────────────────────────────────────────────────
 
 export function ServiceDashboard() {
-  const workspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const workspace = useCurrentWorkspace();
 
   const [services, setServices] = useState<DetectedService[]>([]);
   const [loading, setLoading] = useState(false);
@@ -195,9 +195,9 @@ export function ServiceDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!workspace?.path) return;
-    void detectServices(workspace.path);
-  }, [workspace?.path, detectServices]);
+    if (!workspace?.folders[0]?.path) return;
+    void detectServices(workspace.folders[0]!.path);
+  }, [workspace?.folders[0]?.path, detectServices]);
 
   // ── Subscribe to PTY status ────────────────────────────────────────────────
 
@@ -240,12 +240,12 @@ export function ServiceDashboard() {
   // ── Run all services ────────────────────────────────────────────────────────
 
   const handleRunAll = useCallback(async () => {
-    if (!workspace?.path) return;
+    if (!workspace?.folders[0]?.path) return;
 
     setLoading(true);
     setError(null);
     try {
-      const ids = await servicesRunAll(workspace.path);
+      const ids = await servicesRunAll(workspace.folders[0]!.path);
 
       // Map service names to their PTY IDs in the same order.
       const newMap = new Map(serviceMap);
@@ -263,17 +263,17 @@ export function ServiceDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [workspace?.path, services, serviceMap]);
+  }, [workspace?.folders[0]?.path, services, serviceMap]);
 
   // ── Run one service ─────────────────────────────────────────────────────────
 
   const handleRunOne = useCallback(
     async (name: string) => {
-      if (!workspace?.path) return;
+      if (!workspace?.folders[0]?.path) return;
 
       setRowLoading((prev) => new Set(prev).add(name));
       try {
-        const ptyId = await servicesRunOne(workspace.path, name);
+        const ptyId = await servicesRunOne(workspace.folders[0]!.path, name);
         setServiceMap((prev) => new Map(prev).set(name, ptyId));
         setStatusMap((prev) => new Map(prev).set(ptyId, 'running'));
         setSpawnedIds([ptyId]);
@@ -287,7 +287,7 @@ export function ServiceDashboard() {
         });
       }
     },
-    [workspace?.path],
+    [workspace?.folders[0]?.path],
   );
 
   // ── Stop one service ────────────────────────────────────────────────────────
@@ -359,7 +359,7 @@ export function ServiceDashboard() {
         <div className="ml-auto flex items-center gap-2">
           {/* Refresh detection */}
           <button
-            onClick={() => void detectServices(workspace.path)}
+            onClick={() => void detectServices(workspace.folders[0]!.path)}
             disabled={loading}
             className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] disabled:opacity-50"
             title="Re-scan workspace for services"

@@ -2,13 +2,13 @@ import { useEffect } from 'react';
 import { Plus, Trash2, RotateCw } from 'lucide-react';
 
 import { useMemoryHubStore } from '@/stores/memory-hub';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 import type { Scope } from '@/stores/memory-hub';
 
 const SCOPES: Array<Scope | 'all'> = ['all', 'project', 'user', 'session'];
 
 export function MemoryHub() {
-  const workspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const workspace = useCurrentWorkspace();
   const {
     records,
     selectedId,
@@ -28,10 +28,10 @@ export function MemoryHub() {
   } = useMemoryHubStore();
 
   useEffect(() => {
-    if (workspace?.path) {
-      void init(workspace.path);
+    if (workspace?.folders[0]?.path) {
+      void init(workspace.folders[0]!.path);
     }
-  }, [workspace?.path, init]);
+  }, [workspace?.folders[0]?.path, init]);
 
   if (!workspace) {
     return (

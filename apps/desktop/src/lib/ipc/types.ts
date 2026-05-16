@@ -5,12 +5,46 @@
  */
 
 // ── Workspace ──────────────────────────────────────────────────────────────
+//
+// A workspace is a named collection of project folders. Folders can live
+// anywhere on disk; they do NOT have to share a parent. This lets the user
+// group e.g. `~/work/auth-server` and `~/personal/notes-app` into a single
+// "Side projects" workspace.
+
+/** A single project folder inside a workspace. */
+export interface WorkspaceFolder {
+  /** Absolute filesystem path. */
+  path: string;
+  /** Display name (defaults to folder basename, user can rename). */
+  name: string;
+  /** ISO-8601 — when this folder was added to the workspace. */
+  addedAt: string;
+}
 
 export interface Workspace {
   id: string;
+  /** User-supplied workspace name (e.g. "Microservices Demo"). */
+  name: string;
+  /** Ordered list of project folders. `folders[0]` is the implicit
+   *  "primary" used by features that need a single anchor path (services,
+   *  MCP config, memory store, lane worktrees). */
+  folders: WorkspaceFolder[];
+  /** ISO-8601 — when the workspace itself was created. */
+  createdAt: string;
+}
+
+/** Helper: get the primary folder path or null if none. */
+export function workspacePrimaryPath(ws: Workspace | null): string | null {
+  return ws?.folders[0]?.path ?? null;
+}
+
+/** Shape returned by the Rust `fs_open_workspace` command — used by the
+ *  TS layer as a folder candidate, then incorporated into a Workspace. */
+export interface FolderInfo {
+  id: string;
   name: string;
   path: string;
-  openedAt: string; // ISO-8601
+  openedAt: string;
 }
 
 // ── File System ────────────────────────────────────────────────────────────

@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { RotateCw, FolderOpen, Plus } from 'lucide-react';
 
 import { useSkillsStore } from '@/stores/skills';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 
 export function SkillManager() {
-  const workspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const workspace = useCurrentWorkspace();
   const {
     skills,
     enabledIds,
@@ -22,10 +22,10 @@ export function SkillManager() {
   } = useSkillsStore();
 
   useEffect(() => {
-    if (workspace?.path) {
-      void init(workspace.path);
+    if (workspace?.folders[0]?.path) {
+      void init(workspace.folders[0]!.path);
     }
-  }, [workspace?.path, init]);
+  }, [workspace?.folders[0]?.path, init]);
 
   if (!workspace) {
     return (

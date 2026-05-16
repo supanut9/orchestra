@@ -3,7 +3,7 @@ import { useAgentStore } from '@/stores/agent';
 import type { ChatMessage as ChatMessageType, ShellToolCall } from '@/stores/agent';
 import { useSettingsStore } from '@/stores/settings';
 import type { ProviderId } from '@/stores/settings';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 import { streamMessage } from '@/lib/ai/provider-registry';
 import { createShellRunner, streamWithTools } from '@/lib/ai/agent-tools';
 import { ChatMessage } from './ChatMessage';
@@ -38,7 +38,7 @@ export function AgentPanel() {
     recordShellPty,
   } = useAgentStore();
   const { providers, activeProviderId, activeModelId, setActiveProvider } = useSettingsStore();
-  const { currentWorkspace } = useWorkspaceStore();
+  const currentWorkspace = useCurrentWorkspace();
 
   const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -56,7 +56,7 @@ export function AgentPanel() {
   }, [messages]);
 
   const activeConfig = activeProviderId ? providers[activeProviderId] : null;
-  const workspacePath = currentWorkspace?.path ?? null;
+  const workspacePath = currentWorkspace?.folders[0]?.path ?? null;
 
   /**
    * Build the conversation history for multi-turn context.

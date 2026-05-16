@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Wand2, Trash2 } from 'lucide-react';
 
 import { useLanesStore } from '@/stores/lanes';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 import { useSettingsStore } from '@/stores/settings';
 import { streamMessage } from '@/lib/ai/provider-registry';
 import { LaneCard } from './LaneCard';
@@ -10,7 +10,7 @@ import { LaneCard } from './LaneCard';
 export function LaneBoard() {
   const { lanes, goal, isProposing, error, setGoal, setProposing, setError, addLanes, clearAll } =
     useLanesStore();
-  const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const currentWorkspace = useCurrentWorkspace();
   const activeProviderId = useSettingsStore((s) => s.activeProviderId);
   const providers = useSettingsStore((s) => s.providers);
 

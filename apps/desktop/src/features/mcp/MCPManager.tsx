@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Plus, RotateCw, Play, Square } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useCurrentWorkspace } from '@/stores/workspace';
 import { AddServerDialog } from './AddServerDialog';
 import type { MCPServerConfig } from '@orchestra/mcp-client';
 
 export function MCPManager() {
-  const workspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const workspace = useCurrentWorkspace();
   const {
     servers,
     selectedId,
@@ -27,10 +27,10 @@ export function MCPManager() {
   const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
-    if (workspace?.path) {
-      void init(workspace.path);
+    if (workspace?.folders[0]?.path) {
+      void init(workspace.folders[0]!.path);
     }
-  }, [workspace?.path, init]);
+  }, [workspace?.folders[0]?.path, init]);
 
   if (!workspace) {
     return (

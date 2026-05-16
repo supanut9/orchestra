@@ -1,45 +1,64 @@
 /**
- * OpenWorkspaceButton — lets the user pick a folder via the native OS dialog,
- * registers it as the current workspace, and starts the fs watcher.
+ * OpenWorkspaceButton — picks a folder and adds it to the active workspace.
+ *
+ * If no workspace exists yet, the workspace store creates a default one.
+ * The folder watcher is started automatically on add.
  */
 
 import { useState } from 'react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Plus } from 'lucide-react';
 import { fsOpenWorkspace, fsStartWatching } from '@/lib/ipc';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
 interface OpenWorkspaceButtonProps {
   className?: string;
+  /** Compact rendering inside the explorer (just a "+ Add folder" link). */
+  compact?: boolean;
 }
 
-export function OpenWorkspaceButton({ className }: OpenWorkspaceButtonProps) {
+export function OpenWorkspaceButton({ className, compact = false }: OpenWorkspaceButtonProps) {
   const [loading, setLoading] = useState(false);
-  const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
-  const addRecentWorkspace = useWorkspaceStore((s) => s.addRecentWorkspace);
+  const addFolder = useWorkspaceStore((s) => s.addFolder);
 
   async function handleClick() {
     setLoading(true);
     try {
-      // Open the native folder picker.
       const selected = await openDialog({ directory: true, multiple: false });
       if (!selected || typeof selected !== 'string') return;
 
-      // Ask Rust to validate the path and return a Workspace object.
-      const workspace = await fsOpenWorkspace(selected);
+      const folder = await fsOpenWorkspace(selected);
+      addFolder(folder);
 
-      // Update store.
-      setCurrentWorkspace(workspace);
-      addRecentWorkspace(workspace);
-
-      // Start the fs watcher for live file-tree updates.
-      await fsStartWatching(selected);
+      // Best-effort watcher (FileTree starts one per folder; this is harmless).
+      fsStartWatching(selected).catch(() => {});
     } catch (err) {
-      console.error('[OpenWorkspaceButton] failed to open workspace:', err);
+      console.error('[OpenWorkspaceButton] failed to add folder:', err);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={loading}
+        className={cn(
+          'flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-[hsl(var(--border))]',
+          'px-2 py-1.5 text-xs text-[hsl(var(--muted-foreground))]',
+          'hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          'transition-colors',
+          className,
+        )}
+      >
+        <Plus className="h-3 w-3" />
+        {loading ? 'Adding…' : 'Add folder'}
+      </button>
+    );
   }
 
   return (
