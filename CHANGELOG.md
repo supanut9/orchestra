@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-16
+
+Patch release adding **in-app auto-updates**, **multi-folder workspaces**,
+**Makefile + Go service detection**, **CLI-backed agent providers** (Claude
+Code / Codex / Gemini CLIs use their own auth — no API key needed), and a
+**Tauri-backed JSON storage** adapter so workspaces / settings survive
+WebView wipes.
+
+### Added
+
+- **Auto-updater** — `tauri-plugin-updater` + `tauri-plugin-process`
+  wired up; `latest.json` published with every release and signed with a
+  minisign keypair stored in GitHub Secrets. App polls the manifest on
+  start + every 6h; users see an "Update available" pill in the header
+  with release notes and a one-click "Install & Restart".
+- **Multi-folder workspaces** — name a workspace, add folders from
+  anywhere on disk, switch between workspaces from the header dropdown.
+  Persistence migrates the old single-path workspaces automatically.
+- **Tauri-backed JSON storage** for zustand stores — workspaces and
+  settings now live in
+  `~/Library/Application Support/dev.orchestra.desktop/*.json` so they
+  survive WebView localStorage wipes.
+- **Service detection** — Makefile targets (run/dev/serve/start/watch/
+  air + run-_/dev-_) and standalone `go.mod` + `main.go` modules are now
+  recognised alongside docker-compose, Procfile, package.json scripts,
+  and orchestra.yaml.
+- **CLI-backed providers** — Claude Code, OpenAI Codex, and Gemini CLIs
+  can be wired in from Settings; Orchestra spawns the binary via the PTY
+  backend and streams output into the chat. Lets Max-subscription users
+  chat without buying API credits.
+
+### Fixed
+
+- PTY manager crashed at app start on synchronous `tokio::task::spawn_blocking`
+  calls — switched to `tauri::async_runtime::spawn_blocking`.
+- Run-All Services showed blank terminals because output was emitted
+  before the React Terminal mounted. Added a per-PTY replay buffer +
+  `pty_replay` command; `Terminal.tsx` now replays buffered bytes before
+  subscribing to live output.
+
+
+
 ## [0.1.0] — 2026-05-16
 
 First public alpha. End-to-end demos work on macOS, Linux, and Windows. Memory persistence and real MCP-server tool calls are still WIP.

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FileTree } from '@/features/workspace/FileTree';
 import { OpenWorkspaceButton } from '@/features/workspace/OpenWorkspaceButton';
 import { WorkspaceSwitcher } from '@/features/workspace/WorkspaceSwitcher';
+import { UpdateChecker } from '@/features/updater/UpdateChecker';
 import { Editor } from '@/features/editor/Editor';
 import { AgentPanel } from '@/features/agents/AgentPanel';
 import { TerminalGrid } from '@/features/terminal/TerminalGrid';
@@ -25,6 +26,7 @@ export function App() {
         <span className="text-sm font-semibold tracking-wide">Orchestra</span>
         <span className="text-xs text-[hsl(var(--muted-foreground))]">— AI-native IDE</span>
         <div className="ml-auto flex items-center gap-2 text-xs">
+          <UpdateChecker />
           <WorkspaceSwitcher />
           <OpenWorkspaceButton />
         </div>
