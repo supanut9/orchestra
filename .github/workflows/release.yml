@@ -8,25 +8,24 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Release (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS — arm64
+          # macOS — Apple Silicon (Intel macs will fall back to Rosetta)
           - platform: macos-aarch64
             runner: macos-latest
             args: --target aarch64-apple-darwin
             rust_target: aarch64-apple-darwin
-
-          # macOS — x86_64
-          - platform: macos-x86_64
-            runner: macos-latest
-            args: --target x86_64-apple-darwin
-            rust_target: x86_64-apple-darwin
 
           # Linux — deb + AppImage
           - platform: linux-x86_64
