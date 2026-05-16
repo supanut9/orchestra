@@ -7,6 +7,7 @@
 // Event bus topics (cross-lane contract):
 //   `pty.output`  — { ptyId, dataBase64 }
 //   `pty.status`  — { ptyId, status, exitCode }
+//   `pty.owner`   — { ptyId, owner }                 (emitted on claim)
 
 use std::{
     io::{Read, Write},
@@ -51,6 +52,13 @@ pub struct PtyStatusPayload {
     pub pty_id: String,
     pub status: String,
     pub exit_code: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyOwnerPayload {
+    pub pty_id: String,
+    pub owner: PtyOwner,
 }
 
 // ── Serialisable summary ──────────────────────────────────────────────────────
@@ -319,14 +327,28 @@ impl PtyManager {
         Ok(())
     }
 
-    /// Transfer ownership of a PTY to `new_owner`.
-    pub fn claim(&self, pty_id: &str, new_owner: PtyOwner) -> Result<(), String> {
+    /// Transfer ownership of a PTY to `new_owner` and emit `pty.owner`.
+    pub fn claim(
+        &self,
+        pty_id: &str,
+        new_owner: PtyOwner,
+        app_handle: &AppHandle,
+    ) -> Result<(), String> {
         let mut handle = self
             .ptys
             .get_mut(pty_id)
             .ok_or_else(|| format!("pty {pty_id} not found"))?;
 
-        handle.owner = new_owner;
+        handle.owner = new_owner.clone();
+        drop(handle);
+
+        let _ = app_handle.emit(
+            "pty.owner",
+            &PtyOwnerPayload {
+                pty_id: pty_id.to_string(),
+                owner: new_owner,
+            },
+        );
         Ok(())
     }
 

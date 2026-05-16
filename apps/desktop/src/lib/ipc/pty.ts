@@ -49,6 +49,12 @@ export interface PtyStatusPayload {
   exitCode: number | null;
 }
 
+/** Payload emitted on the `pty.owner` Tauri event when a PTY's owner changes. */
+export interface PtyOwnerPayload {
+  ptyId: string;
+  owner: PtyOwner;
+}
+
 // ── Encoding helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -200,4 +206,18 @@ export async function subscribeToPtyStatus(
   handler: (payload: PtyStatusPayload) => void,
 ): Promise<UnlistenFn> {
   return listen<PtyStatusPayload>('pty.status', (event) => handler(event.payload));
+}
+
+/**
+ * Subscribe to PTY ownership changes (`pty.owner` event).
+ *
+ * Emitted whenever `pty_claim` succeeds — typically when an AI agent takes
+ * over a user-spawned terminal, or when the user reclaims one from an agent.
+ * Receives events for *all* PTYs; inspect `payload.ptyId` to update the
+ * correct tab.
+ */
+export async function subscribeToPtyOwner(
+  handler: (payload: PtyOwnerPayload) => void,
+): Promise<UnlistenFn> {
+  return listen<PtyOwnerPayload>('pty.owner', (event) => handler(event.payload));
 }

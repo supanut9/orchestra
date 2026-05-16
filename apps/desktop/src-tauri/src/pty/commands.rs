@@ -136,13 +136,14 @@ pub fn pty_claim(
     pty_id: String,
     owner: PtyOwner,
     state: State<'_, PtyState>,
+    app: AppHandle,
 ) -> Result<(), String> {
     let manager = state
         .0
         .lock()
         .map_err(|e| format!("manager lock poisoned: {e}"))?;
 
-    manager.claim(&pty_id, owner)
+    manager.claim(&pty_id, owner, &app)
 }
 
 // ── pty_list ──────────────────────────────────────────────────────────────────

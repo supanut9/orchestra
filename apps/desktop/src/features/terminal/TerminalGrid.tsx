@@ -19,8 +19,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { X, Bot, User } from 'lucide-react';
 
-import { ptyList, ptyKill, subscribeToPtyStatus } from '@/lib/ipc/pty';
-import type { PtyInfo, PtyStatusPayload } from '@/lib/ipc/pty';
+import { ptyList, ptyKill, subscribeToPtyStatus, subscribeToPtyOwner } from '@/lib/ipc/pty';
+import type { PtyInfo, PtyStatusPayload, PtyOwnerPayload } from '@/lib/ipc/pty';
 import type { PtyStatus } from '@/lib/ipc/types';
 
 import { Terminal } from './Terminal';
@@ -122,6 +122,7 @@ export function TerminalGrid({ ptyIds: externalPtyIds }: TerminalGridProps = {})
   const [ptys, setPtys] = useState<PtyInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
+  const unlistenOwnerRef = useRef<(() => void) | null>(null);
 
   // ── Load initial PTY list ──────────────────────────────────────────────────
 
@@ -184,9 +185,20 @@ export function TerminalGrid({ ptyIds: externalPtyIds }: TerminalGridProps = {})
       else unlisten();
     });
 
+    subscribeToPtyOwner((payload: PtyOwnerPayload) => {
+      if (!mounted) return;
+      setPtys((currentPtys) =>
+        currentPtys.map((p) => (p.id === payload.ptyId ? { ...p, owner: payload.owner } : p)),
+      );
+    }).then((unlisten) => {
+      if (mounted) unlistenOwnerRef.current = unlisten;
+      else unlisten();
+    });
+
     return () => {
       mounted = false;
       unlistenRef.current?.();
+      unlistenOwnerRef.current?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
