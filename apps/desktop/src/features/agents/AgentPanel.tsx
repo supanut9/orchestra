@@ -42,6 +42,8 @@ export function AgentPanel() {
     startToolCall,
     finishToolCall,
     recordShellPty,
+    loadConversation,
+    newConversation,
   } = useAgentStore();
   const { providers, activeProviderId, activeModelId, setActiveProvider } = useSettingsStore();
   const currentWorkspace = useCurrentWorkspace();
@@ -69,6 +71,13 @@ export function AgentPanel() {
 
   const activeConfig = activeProviderId ? providers[activeProviderId] : null;
   const workspacePath = currentWorkspace?.folders[0]?.path ?? null;
+
+  // Restore the previous conversation when the workspace changes (or on first
+  // mount with a workspace already active). The store handles "already loaded"
+  // gracefully so this is cheap to call.
+  useEffect(() => {
+    void loadConversation(workspacePath);
+  }, [workspacePath, loadConversation]);
 
   /**
    * Build the conversation history for multi-turn context.
@@ -267,8 +276,17 @@ export function AgentPanel() {
 
         {messages.length > 0 && (
           <button
+            onClick={newConversation}
+            title="Start a new conversation. Previous turns stay in this workspace's memory store."
+            className="shrink-0 text-xs px-2 py-1 rounded border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+          >
+            + New
+          </button>
+        )}
+        {messages.length > 0 && (
+          <button
             onClick={clearMessages}
-            title="Clear conversation"
+            title="Hide the conversation from view (history stays in memory store)"
             className="shrink-0 text-xs px-2 py-1 rounded border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-red-400 transition-colors"
           >
             Clear

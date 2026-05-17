@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
+import { getRecentMemory } from '@/lib/ai/memory-bridge';
 
 export type ChatRole = 'user' | 'assistant' | 'system';
 
@@ -83,6 +84,32 @@ interface AgentState {
   /** Remove all messages from the current conversation. */
   clearMessages: () => void;
 
+  /**
+   * Start a fresh conversation (clears in-memory messages + resets session ID).
+   * History remains in the per-workspace sqlite store; future
+   * `loadConversation` calls will still see it.
+   */
+  newConversation: () => void;
+
+  /**
+   * Hydrate `messages` from the given workspace's persisted chat history.
+   * Replaces (not appends) the current `messages` array.
+   *
+   * - Pulls the most-recent `maxMessages` user / assistant turns from
+   *   `getRecentMemory` (which reads the per-workspace sqlite store).
+   * - Re-orders them oldest-first for chronological display.
+   * - No-op when `workspacePath` is null.
+   * - Aborts any in-flight stream before swapping.
+   */
+  loadConversation: (workspacePath: string | null, maxMessages?: number) => Promise<void>;
+
+  /**
+   * Currently-loaded workspace path, or null. Set by `loadConversation`.
+   * Used to skip redundant reloads when the workspace hasn't actually
+   * changed.
+   */
+  loadedWorkspacePath: string | null;
+
   /** Push a raw message directly (used for system messages / rehydration). */
   appendMessage: (msg: Omit<ChatMessage, 'id' | 'createdAt'>) => void;
 
@@ -127,6 +154,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   activeShellPtyIds: [],
   shellToolCalls: {},
+  loadedWorkspacePath: null,
 
   sendMessage: async (text, streamFn) => {
     if (get().isStreaming) return;
@@ -195,6 +223,76 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   clearMessages: () => set({ messages: [], error: undefined }),
+
+  newConversation: () => {
+    const { abortController } = get();
+    abortController?.abort();
+    set({
+      messages: [],
+      error: undefined,
+      isStreaming: false,
+      abortController: null,
+      currentSessionId: nanoid(),
+      activeShellPtyIds: [],
+      shellToolCalls: {},
+    });
+  },
+
+  loadConversation: async (workspacePath, maxMessages = 50) => {
+    // Abort any in-flight stream before swapping conversations.
+    get().abortController?.abort();
+
+    if (!workspacePath) {
+      set({
+        messages: [],
+        loadedWorkspacePath: null,
+        isStreaming: false,
+        abortController: null,
+        activeShellPtyIds: [],
+        shellToolCalls: {},
+      });
+      return;
+    }
+
+    // Avoid redundant reload when already loaded for this workspace.
+    if (get().loadedWorkspacePath === workspacePath) return;
+
+    try {
+      const records = await getRecentMemory(workspacePath, maxMessages);
+
+      // getRecentMemory returns newest-first; sort ascending by createdAt
+      // so the chat reads top → bottom in chronological order.
+      const ascending = [...records].sort((a, b) => {
+        const ta = new Date(a.createdAt).getTime();
+        const tb = new Date(b.createdAt).getTime();
+        return ta - tb;
+      });
+
+      const messages: ChatMessage[] = ascending
+        .filter((r) => r.kind === 'user-message' || r.kind === 'assistant-message')
+        .map((r) => ({
+          id: r.id,
+          role: r.kind === 'user-message' ? 'user' : 'assistant',
+          content: r.content,
+          createdAt: new Date(r.createdAt),
+        }));
+
+      set({
+        messages,
+        loadedWorkspacePath: workspacePath,
+        isStreaming: false,
+        abortController: null,
+        activeShellPtyIds: [],
+        shellToolCalls: {},
+      });
+    } catch (err) {
+      console.warn('[agent-store] loadConversation failed:', err);
+      set({
+        messages: [],
+        loadedWorkspacePath: workspacePath,
+      });
+    }
+  },
 
   appendMessage: (msg) =>
     set((s) => ({
