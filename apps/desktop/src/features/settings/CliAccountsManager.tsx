@@ -374,14 +374,25 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
                         </span>
                       )}
                     </button>
+                    {!p && (
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryLogin(a)}
+                        className="rounded p-1 opacity-0 hover:bg-[hsl(var(--muted))] group-hover:opacity-100"
+                        title="Sign in / re-login via browser"
+                      >
+                        <LogIn className="h-3 w-3" />
+                      </button>
+                    )}
                     {p?.status === 'failed' && (
                       <button
                         type="button"
                         onClick={() => void handleRetryLogin(a)}
-                        className="rounded bg-[hsl(var(--muted))] px-2 py-0.5 text-[10px] hover:bg-[hsl(var(--muted))]/80"
+                        className="flex items-center gap-1 rounded bg-yellow-500/20 px-2 py-0.5 text-[10px] text-yellow-300 hover:bg-yellow-500/30"
                         title="Retry login"
                       >
                         <LogIn className="h-3 w-3" />
+                        Sign in
                       </button>
                     )}
                     <button
@@ -437,9 +448,11 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
 
       {addError && <p className="text-[10px] text-red-400">{addError}</p>}
       <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
-        Clicking Add runs <code className="font-mono">{loginArgs(providerId).join(' ')}</code>{' '}
-        against a fresh credential directory and opens the OAuth URL in your browser
-        automatically. Once you complete login the row shows ✓ Connected.
+        Add account creates a fresh credential directory and runs{' '}
+        <code className="font-mono">{loginArgs(providerId).join(' ')}</code>, opening
+        the OAuth URL in your browser automatically. To re-login an existing account
+        (token expired, or a previous login failed), hover the row and click the{' '}
+        <LogIn className="inline h-2.5 w-2.5" /> icon.
       </p>
     </div>
   );

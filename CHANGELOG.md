@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] — 2026-05-17
+
+### Added
+
+- **Per-row "Sign in" button on every CLI account.** Hover any account
+  row and click the login icon to (re-)trigger the browser OAuth flow
+  against that account's existing credential directory. Previously the
+  only way to log in was during the initial Add — if the v0.1.10 broken
+  codex flag had killed your first login, or a token expired, there was
+  no way to retry without removing and re-adding the account. Failed
+  logins now also render a prominent yellow "Sign in" button inline.
+
 ## [0.1.11] — 2026-05-17
 
 ### Fixed
