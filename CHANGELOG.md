@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] — 2026-05-17
+
+### Fixed
+
+- **Codex CLI login still wouldn't start in v0.1.10.** The
+  `--skip-git-repo-check` flag I added doesn't exist in codex 0.130+ —
+  codex bailed immediately with
+  `error: unexpected argument '--skip-git-repo-check' found`, never
+  printing the OAuth URL Orchestra was waiting for. Removed the flag;
+  `codex login` (no extra args) from $HOME does not trigger the
+  trusted-dir check, only interactive runs do.
+- **"✓ Connected" appearing instantly on every Codex login.** The
+  credential poll was a naive "is the dir non-empty" check, but codex
+  creates `log/`, `tmp/`, and `memories/` subdirectories on startup
+  (before OAuth completes), so the poll matched on the very first tick.
+  `cli_account_has_credentials` is now provider-aware: it looks for the
+  specific credentials file each CLI writes — `auth.json` for codex,
+  `.credentials.json` for claude, `oauth_creds.json` for gemini — and
+  ignores the scratch directories.
+
 ## [0.1.10] — 2026-05-17
 
 ### Fixed

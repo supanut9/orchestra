@@ -55,8 +55,12 @@ function loginArgs(providerId: CliProviderId): string[] {
     case 'claude-cli':
       return ['login'];
     case 'codex-cli':
-      // `--skip-git-repo-check` must come BEFORE the `login` subcommand.
-      return ['--skip-git-repo-check', 'login'];
+      // `codex login` (no flags) from $HOME is sufficient — the
+      // trusted-dir check only applies to interactive runs, not the
+      // login subcommand. We previously passed `--skip-git-repo-check`
+      // but codex 0.130+ removed that flag and now bails with
+      // "unexpected argument" before printing the OAuth URL.
+      return ['login'];
     case 'gemini-cli':
       return ['auth', 'login'];
   }
@@ -183,7 +187,7 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
         return;
       }
       try {
-        const has = await cliAccountHasCredentials(accountId);
+        const has = await cliAccountHasCredentials(accountId, providerId);
         if (has) {
           window.clearInterval(pollerId);
           unlisten();

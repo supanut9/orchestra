@@ -91,15 +91,49 @@ pub fn cli_account_remove_dir(account_id: String) -> Result<(), String> {
     Ok(())
 }
 
-/// True if the credential directory contains anything (a heuristic for
-/// "user has completed login"). The CLI itself decides what files it writes;
-/// any non-empty content counts.
+/// True when the CLI has written its actual credentials file into the
+/// account directory. Each provider stores tokens differently and several
+/// of them (notably codex) create scratch subdirs like `log/`, `tmp/`,
+/// and `memories/` on startup — long before OAuth completes — so a naive
+/// "is the directory non-empty" check returns false-positives.
+///
+/// We match against a per-provider allowlist of filenames; any one of
+/// them existing as a *regular file* (not a directory) is treated as
+/// "login complete".
 #[tauri::command]
-pub fn cli_account_has_credentials(account_id: String) -> Result<bool, String> {
+pub fn cli_account_has_credentials(
+    account_id: String,
+    provider_id: String,
+) -> Result<bool, String> {
     let dir = accounts_root()?.join(safe_dirname(&account_id));
     if !dir.exists() {
         return Ok(false);
     }
-    let entries = fs::read_dir(&dir).map_err(|e| format!("read account dir: {e}"))?;
-    Ok(entries.count() > 0)
+    let candidates: &[&str] = match provider_id.as_str() {
+        // Codex (OpenAI) writes `auth.json` after OAuth — pre-login it
+        // only creates `log/`, `tmp/`, `memories/` directories.
+        "codex-cli" => &["auth.json"],
+        // Claude Code writes `.credentials.json` into its config dir.
+        "claude-cli" => &[".credentials.json", "credentials.json"],
+        // Gemini CLI writes `oauth_creds.json` (newer) or `credentials.json`.
+        "gemini-cli" => &["oauth_creds.json", "credentials.json"],
+        // Unknown provider: fall back to "any regular file present".
+        _ => {
+            let entries =
+                fs::read_dir(&dir).map_err(|e| format!("read account dir: {e}"))?;
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
+        }
+    };
+    for name in candidates {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

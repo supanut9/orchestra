@@ -32,9 +32,13 @@ export function cliAccountRemoveDir(accountId: string): Promise<void> {
 }
 
 /**
- * Heuristic: true if the credential directory contains any files. Used by
- * the "Add Account" flow to detect when the OAuth login has saved tokens.
+ * Provider-aware credential check: returns true only when the CLI has
+ * actually written its credentials file (not just startup state like
+ * codex's `log/` and `tmp/` dirs, which appear before OAuth completes).
  */
-export function cliAccountHasCredentials(accountId: string): Promise<boolean> {
-  return invoke<boolean>('cli_account_has_credentials', { accountId });
+export function cliAccountHasCredentials(
+  accountId: string,
+  providerId: string,
+): Promise<boolean> {
+  return invoke<boolean>('cli_account_has_credentials', { accountId, providerId });
 }
