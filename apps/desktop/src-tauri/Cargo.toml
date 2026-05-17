@@ -40,7 +40,7 @@ portable-pty  = "^0.8"
 notify = "^7"
 
 # Git worktree management
-git2 = "^0.19"
+git2 = "^0.20"
 
 # Local memory store (sqlite-vec will be added by Lane C)
 rusqlite = { version = "^0.32", features = ["bundled"] }
