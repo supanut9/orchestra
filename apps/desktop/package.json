@@ -42,7 +42,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "clsx": "^2.1.1",
     "class-variance-authority": "^0.7.1",
-    "tailwind-merge": "^2.5.0",
+    "tailwind-merge": "^3.6.0",
     "lucide-react": "^0.469.0",
     "nanoid": "^5.0.9",
     "@orchestra/ai-runtime": "workspace:*",
