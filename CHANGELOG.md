@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-05-17
+
+### Added
+
+- **Inline AI edit (Cmd+I)** — Cursor-style "edit with AI" inside the
+  CodeMirror editor. Select code (or place the cursor), press
+  `Cmd/Ctrl+I`, type an instruction ("rename to fooBar", "add error
+  handling", "convert to async"), and the active provider streams a
+  replacement. Accept replaces the selection; Reject closes the widget;
+  Retry re-runs with the same prompt. Works with every configured
+  provider (Anthropic / OpenAI / Google / Ollama / OpenRouter / Claude
+  CLI / Codex CLI / Gemini CLI) through `streamMessage`. The full file
+  (capped at 8 KB) is sent as context so the model can reason about
+  surrounding code.
+
 ## [0.1.5] — 2026-05-17
 
 Substantial release — lane agents now drive their own terminals, a

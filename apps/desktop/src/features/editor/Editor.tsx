@@ -29,6 +29,7 @@ import { File as FileIcon } from 'lucide-react';
 import { fsReadFile, fsWriteFile } from '@/lib/ipc';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
+import { InlineEdit, type InlineEditAnchor } from './InlineEdit';
 
 // ── Language detection ────────────────────────────────────────────────────────
 
@@ -95,6 +96,14 @@ export function Editor() {
 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Inline AI edit (Cmd+I) state.
+  const [inlineEdit, setInlineEdit] = useState<{
+    anchor: InlineEditAnchor;
+    selection: string;
+    fullFile: string;
+    range: { from: number; to: number };
+  } | null>(null);
 
   // Track the path the current view was initialized for (avoid redundant resets).
   const loadedPathRef = useRef<string | null>(null);
@@ -195,16 +204,61 @@ export function Editor() {
     }
   }, [activeFilePath, getFileContent, markDirty]);
 
+  // ── Open inline edit widget (Cmd+I) ───────────────────────────────────────
+  const openInlineEdit = useCallback(() => {
+    const view = viewRef.current;
+    if (!view || !activeFilePath) return;
+    const { state } = view;
+    const sel = state.selection.main;
+    const fullFile = state.doc.toString();
+    const selection = state.sliceDoc(sel.from, sel.to);
+
+    // Find on-screen coordinates for the selection anchor.
+    const coords = view.coordsAtPos(sel.from);
+    const editorRect = view.dom.getBoundingClientRect();
+    const top = coords ? coords.bottom + 4 : editorRect.top + 40;
+    const left = coords ? coords.left : editorRect.left + 40;
+
+    setInlineEdit({
+      anchor: { top, left },
+      selection,
+      fullFile,
+      range: { from: sel.from, to: sel.to },
+    });
+  }, [activeFilePath]);
+
   useEffect(() => {
     function handleKeydown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         void handleSave();
       }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'i' || e.key === 'I')) {
+        const view = viewRef.current;
+        if (view && (view.hasFocus || document.activeElement === view.contentDOM)) {
+          e.preventDefault();
+          openInlineEdit();
+        }
+      }
     }
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
-  }, [handleSave]);
+  }, [handleSave, openInlineEdit]);
+
+  function applyInlineEdit(replacement: string) {
+    const view = viewRef.current;
+    if (!view || !inlineEdit) return;
+    view.dispatch({
+      changes: {
+        from: inlineEdit.range.from,
+        to: inlineEdit.range.to,
+        insert: replacement,
+      },
+      selection: { anchor: inlineEdit.range.from + replacement.length },
+    });
+    view.focus();
+    setInlineEdit(null);
+  }
 
   const _fileName = activeFilePath?.split('/').pop() ?? activeFilePath ?? '';
   const isDirty = activeFilePath ? dirtyFiles.includes(activeFilePath) : false;
@@ -281,6 +335,18 @@ export function Editor() {
           ref={editorContainerRef}
           className="flex-1 min-h-0 overflow-hidden"
           style={{ height: '100%' }}
+        />
+      )}
+
+      {/* Inline AI edit overlay (Cmd+I) */}
+      {inlineEdit && activeFilePath && (
+        <InlineEdit
+          anchor={inlineEdit.anchor}
+          selection={inlineEdit.selection}
+          fullFile={inlineEdit.fullFile}
+          filePath={activeFilePath}
+          onAccept={applyInlineEdit}
+          onCancel={() => setInlineEdit(null)}
         />
       )}
     </div>
