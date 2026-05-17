@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-05-17
+
+### Added
+
+- **Per-workspace conversation restore.** Switching to a workspace (or
+  reopening the app with one active) auto-hydrates the agent chat with
+  the most recent 50 user / assistant turns from that workspace's
+  `.orchestra/memory.sqlite` store. Pick up where you left off after a
+  shutdown.
+- **"+ New" conversation button** next to Clear. Starts a fresh thread
+  with a new session ID; previous history stays queryable from Memory Hub.
+- **Auto-abort on workspace switch.** Any in-flight chat stream is
+  cancelled before swapping to the new workspace's history.
+
 ## [0.1.6] — 2026-05-17
 
 ### Added
