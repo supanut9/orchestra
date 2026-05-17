@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] — 2026-05-17
+
+### Fixed
+
+- **Codex CLI login: "Not inside a trusted directory" error.**
+  Orchestra now passes `--skip-git-repo-check` (before the `login`
+  subcommand) when running `codex login`, and spawns the login PTY with
+  `$HOME` as cwd so the trusted-dir check passes regardless of which
+  workspace is open.
+
+### Changed
+
+- **Browser-first CLI login UX.** Adding a new CLI account no longer
+  requires reading the terminal and Cmd-clicking links. Orchestra now
+  watches the login PTY's output, regex-matches the first OAuth URL
+  (`https?://…`), and opens it in your default browser automatically
+  via `tauri-plugin-shell`. The account row shows an inline status badge
+  — "Starting…" → "Awaiting OAuth in browser…" → "✓ Connected" — backed
+  by a 1.5s poll of the credential directory (5 min timeout, with a
+  Retry button on failure). The PTY tab still spawns in the bottom panel
+  for debugging but is no longer the primary touchpoint.
+
+### Internal
+
+- `CliAccountsManager` rewritten to subscribe to `subscribeToPtyOutput`
+  per pending login, with per-account `PendingState` tracked alongside
+  the persisted account so the UI reflects login progress without
+  touching the settings store. PTY/poller cleanup runs on unmount and on
+  manual account removal so abandoned logins don't leak background work.
+
 ## [0.1.9] — 2026-05-17
 
 ### Fixed

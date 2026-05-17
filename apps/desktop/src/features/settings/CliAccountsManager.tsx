@@ -1,29 +1,38 @@
 /**
  * CliAccountsManager — multi-account UI for a single CLI provider.
  *
- * Sits inside each CLI ProviderRow in SettingsPanel. Lets the user:
- *   1. See all named profiles for this CLI
- *   2. Switch the active one (next CLI spawn uses its credential dir via
- *      a per-provider env var like CODEX_HOME)
- *   3. Add a new profile — opens a Terminal tab running `<cli> login` with
- *      the env var pointing at a fresh dir, polls for credentials to appear
- *   4. Remove a profile (deletes the credential dir too)
- *   5. Rename a profile inline
+ * Each profile gets its own credential directory under
+ * `~/.orchestra/cli-accounts/<id>/`. Orchestra passes the dir to the CLI
+ * via a per-provider env var (CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME)
+ * so switching profiles is just changing which env var path gets injected —
+ * no logout/login dance, no filesystem mutation.
+ *
+ * Add-account flow (v0.1.10):
+ *   1. User types label + clicks Add
+ *   2. Orchestra creates a fresh credential dir
+ *   3. PTY runs `<cli> login` (with appropriate flags) against that dir
+ *   4. Orchestra parses CLI output for OAuth URLs and auto-opens the first
+ *      one in the user's default browser via tauri-plugin-shell
+ *   5. Status badge shows "Awaiting OAuth…" until the credential dir has
+ *      content; then switches to "Connected ✓"
+ *   6. Background poll runs for up to 5 minutes; on timeout the row shows
+ *      a "Retry" affordance
+ *
+ * The PTY tab is still spawned (visible in the bottom panel for debugging)
+ * but the user doesn't have to interact with it.
  */
 
-import { useState, useRef } from 'react';
-import { Plus, Trash2, Check, Pencil, X, RefreshCw, RadioReceiver } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Plus, Trash2, Check, Pencil, X, RefreshCw, RadioReceiver, LogIn } from 'lucide-react';
 import { nanoid } from 'nanoid';
 
 import {
   useSettingsStore,
   CLI_CONFIG_ENV_VAR,
-  DEFAULT_CLI_ARGS,
   type CliProviderId,
   type CliAccount,
-  type CliProviderConfig,
 } from '@/stores/settings';
-import { ptySpawn } from '@/lib/ipc/pty';
+import { ptySpawn, ptyKill, subscribeToPtyOutput } from '@/lib/ipc/pty';
 import {
   cliAccountCreateDir,
   cliAccountRemoveDir,
@@ -36,12 +45,33 @@ interface CliAccountsManagerProps {
   binaryPath: string;
 }
 
-/** Best-effort login subcommand per CLI. */
-const LOGIN_ARGS: Record<CliProviderId, string[]> = {
-  'claude-cli': ['login'],
-  'codex-cli': ['login'],
-  'gemini-cli': ['auth', 'login'],
-};
+/**
+ * Per-CLI argv for the login subcommand. Some CLIs (notably Codex) refuse
+ * to run outside a git repo unless told otherwise, so we pass the right
+ * escape flag when needed.
+ */
+function loginArgs(providerId: CliProviderId): string[] {
+  switch (providerId) {
+    case 'claude-cli':
+      return ['login'];
+    case 'codex-cli':
+      // `--skip-git-repo-check` must come BEFORE the `login` subcommand.
+      return ['--skip-git-repo-check', 'login'];
+    case 'gemini-cli':
+      return ['auth', 'login'];
+  }
+}
+
+/** Background-task state per pending account. */
+interface PendingState {
+  ptyId: string;
+  pollerId: number;
+  /** 'starting' | 'awaiting-oauth' | 'connected' | 'failed' */
+  status: 'starting' | 'awaiting-oauth' | 'connected' | 'failed';
+  error?: string;
+}
+
+const URL_REGEX = /https?:\/\/[^\s]+/;
 
 export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManagerProps) {
   const cliAccounts = useSettingsStore((s) => s.cliAccounts);
@@ -60,7 +90,115 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
   const [addError, setAddError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
-  const pollerRef = useRef<number | null>(null);
+
+  /** Per-account in-progress login state, keyed by accountId. */
+  const [pending, setPending] = useState<Record<string, PendingState>>({});
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+
+  /** Cleanup any in-flight pollers on unmount. */
+  useEffect(() => {
+    return () => {
+      for (const p of Object.values(pendingRef.current)) {
+        window.clearInterval(p.pollerId);
+        ptyKill(p.ptyId).catch(() => {});
+      }
+    };
+  }, []);
+
+  function setAccountPending(accountId: string, patch: Partial<PendingState> | null): void {
+    setPending((prev) => {
+      if (patch === null) {
+        const { [accountId]: _drop, ...rest } = prev;
+        return rest;
+      }
+      const existing = prev[accountId];
+      if (!existing && (!patch.ptyId || patch.pollerId === undefined || !patch.status)) {
+        return prev;
+      }
+      const next: PendingState = existing
+        ? { ...existing, ...patch }
+        : ({
+            ptyId: patch.ptyId!,
+            pollerId: patch.pollerId!,
+            status: patch.status!,
+            ...patch,
+          } as PendingState);
+      return { ...prev, [accountId]: next };
+    });
+  }
+
+  async function openInBrowser(url: string): Promise<void> {
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(url);
+    } catch (err) {
+      console.warn('[CliAccountsManager] failed to open URL in browser:', err);
+    }
+  }
+
+  async function startLogin(accountId: string, label: string, credentialDir: string): Promise<void> {
+    setAccountPending(accountId, {
+      ptyId: '',
+      pollerId: 0,
+      status: 'starting',
+    });
+
+    // Run the login from $HOME so trusted-dir checks pass (Codex insists on it).
+    const { homeDir } = await import('@tauri-apps/api/path');
+    const home = await homeDir();
+
+    const ptyId = await ptySpawn(
+      `${providerId}: login (${label})`,
+      [binaryPath, ...loginArgs(providerId)],
+      home,
+      { kind: 'user' },
+      { [envVar]: credentialDir },
+    );
+
+    // Subscribe to output; auto-open the first URL we see.
+    let opened = false;
+    const unlisten = await subscribeToPtyOutput(ptyId, (bytes) => {
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      if (!opened) {
+        const match = text.match(URL_REGEX);
+        if (match) {
+          opened = true;
+          void openInBrowser(match[0]);
+          setAccountPending(accountId, { status: 'awaiting-oauth' });
+        }
+      }
+    });
+
+    // Poll the credential dir every 1.5s for up to 5 minutes.
+    let attempts = 0;
+    const pollerId = window.setInterval(async () => {
+      attempts++;
+      if (attempts > 200) {
+        // ~5 min timeout
+        window.clearInterval(pollerId);
+        unlisten();
+        await ptyKill(ptyId).catch(() => {});
+        setAccountPending(accountId, { status: 'failed', error: 'Timed out waiting for login' });
+        return;
+      }
+      try {
+        const has = await cliAccountHasCredentials(accountId);
+        if (has) {
+          window.clearInterval(pollerId);
+          unlisten();
+          await ptyKill(ptyId).catch(() => {});
+          setAccountPending(accountId, { status: 'connected' });
+          // Auto-clear the badge after a moment.
+          window.setTimeout(() => setAccountPending(accountId, null), 2500);
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 1500);
+
+    setAccountPending(accountId, { ptyId, pollerId, status: opened ? 'awaiting-oauth' : 'starting' });
+  }
 
   async function handleAdd() {
     const label = addLabel.trim();
@@ -75,16 +213,7 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
       const accountId = `${providerId}-${nanoid(8)}`;
       const credentialDir = await cliAccountCreateDir(accountId);
 
-      // Spawn an interactive login PTY pointing at the fresh dir.
-      await ptySpawn(
-        `${providerId}: login (${label})`,
-        [binaryPath, ...LOGIN_ARGS[providerId]],
-        process.env['HOME'] ?? '/',
-        { kind: 'user' },
-        { [envVar]: credentialDir },
-      );
-
-      // Persist the account stub immediately so it shows in the list.
+      // Persist immediately so the row shows up with the pending status.
       const account: CliAccount = {
         id: accountId,
         providerId,
@@ -95,25 +224,7 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
       addCliAccount(account);
       setAddLabel('');
 
-      // Background-poll for the credential dir to fill up (means OAuth done).
-      // No-op if it never fills — the account just stays in the list as "pending".
-      let attempts = 0;
-      const poll = window.setInterval(async () => {
-        attempts++;
-        if (attempts > 60) {
-          window.clearInterval(poll);
-          return;
-        }
-        try {
-          const has = await cliAccountHasCredentials(accountId);
-          if (has) {
-            window.clearInterval(poll);
-          }
-        } catch {
-          // ignore
-        }
-      }, 2000);
-      pollerRef.current = poll;
+      await startLogin(accountId, label, credentialDir);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -121,8 +232,27 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
     }
   }
 
+  async function handleRetryLogin(account: CliAccount) {
+    setAccountPending(account.id, null);
+    if (!binaryPath) {
+      setAddError('Set the binary path above first.');
+      return;
+    }
+    try {
+      await startLogin(account.id, account.label, account.credentialDir);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleRemove(account: CliAccount) {
     if (!confirm(`Remove account "${account.label}" and delete its credentials?`)) return;
+    const p = pendingRef.current[account.id];
+    if (p) {
+      window.clearInterval(p.pollerId);
+      if (p.ptyId) await ptyKill(p.ptyId).catch(() => {});
+      setAccountPending(account.id, null);
+    }
     try {
       await cliAccountRemoveDir(account.id);
     } catch (err) {
@@ -151,13 +281,14 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
 
       {accounts.length === 0 ? (
         <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
-          No accounts yet. Add one below to enable per-profile switching.
+          No accounts yet. Add one below — Orchestra will open the browser for you.
         </p>
       ) : (
         <ul className="space-y-1">
           {accounts.map((a) => {
             const isActive = a.id === activeId;
             const isEditing = editingId === a.id;
+            const p = pending[a.id];
             return (
               <li
                 key={a.id}
@@ -215,7 +346,40 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
                           active
                         </span>
                       )}
+                      {p?.status === 'starting' && (
+                        <span className="flex items-center gap-1 text-[10px] text-[hsl(var(--muted-foreground))]">
+                          <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                          Starting…
+                        </span>
+                      )}
+                      {p?.status === 'awaiting-oauth' && (
+                        <span className="flex items-center gap-1 text-[10px] text-yellow-400">
+                          <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                          Awaiting OAuth in browser…
+                        </span>
+                      )}
+                      {p?.status === 'connected' && (
+                        <span className="flex items-center gap-1 text-[10px] text-green-400">
+                          <Check className="h-2.5 w-2.5" />
+                          Connected
+                        </span>
+                      )}
+                      {p?.status === 'failed' && (
+                        <span className="text-[10px] text-red-400">
+                          {p.error ?? 'Login failed'}
+                        </span>
+                      )}
                     </button>
+                    {p?.status === 'failed' && (
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryLogin(a)}
+                        className="rounded bg-[hsl(var(--muted))] px-2 py-0.5 text-[10px] hover:bg-[hsl(var(--muted))]/80"
+                        title="Retry login"
+                      >
+                        <LogIn className="h-3 w-3" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -268,30 +432,12 @@ export function CliAccountsManager({ providerId, binaryPath }: CliAccountsManage
       </div>
 
       {addError && <p className="text-[10px] text-red-400">{addError}</p>}
-      {accounts.length > 0 && (
-        <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
-          Adding an account opens a terminal tab with{' '}
-          <code className="font-mono">{LOGIN_ARGS[providerId].join(' ')}</code> running against
-          a fresh credential directory. Complete the OAuth flow in your browser; tokens save
-          into that dir. Switch the green dot to use that account on the next message.
-        </p>
-      )}
+      <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+        Clicking Add runs <code className="font-mono">{loginArgs(providerId).join(' ')}</code>{' '}
+        against a fresh credential directory and opens the OAuth URL in your browser
+        automatically. Once you complete login the row shows ✓ Connected.
+      </p>
     </div>
   );
 }
 
-/** Wrapper that conditionally renders the manager, given the saved config. */
-export function CliAccountsSection({
-  providerId,
-  config,
-  binaryPath,
-}: {
-  providerId: CliProviderId;
-  config: CliProviderConfig | undefined;
-  binaryPath: string;
-}) {
-  // Allow accounts management even before the row is saved — just need a path.
-  void config;
-  void DEFAULT_CLI_ARGS;
-  return <CliAccountsManager providerId={providerId} binaryPath={binaryPath} />;
-}
