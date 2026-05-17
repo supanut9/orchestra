@@ -12,13 +12,36 @@
 use std::{
     io::{Read, Write},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::SystemTime,
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use dashmap::DashMap;
 use portable_pty::{native_pty_system, Child, CommandBuilder, PtySize};
+
+/// macOS GUI apps inherit a minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`),
+/// so scripts whose shebang is `#!/usr/bin/env node` fail when spawned from
+/// a Finder-launched Orchestra. Resolve the user's interactive PATH once by
+/// running `$SHELL -lc 'echo $PATH'`, then inject it into every PTY spawn
+/// that doesn't already specify PATH.
+static USER_SHELL_PATH: OnceLock<String> = OnceLock::new();
+
+fn user_shell_path() -> &'static str {
+    USER_SHELL_PATH.get_or_init(|| {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        match std::process::Command::new(&shell)
+            .arg("-lc")
+            .arg("echo $PATH")
+            .output()
+        {
+            Ok(out) if out.status.success() => {
+                String::from_utf8_lossy(&out.stdout).trim().to_string()
+            }
+            _ => std::env::var("PATH").unwrap_or_default(),
+        }
+    })
+}
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
@@ -164,9 +187,21 @@ impl PtyManager {
             cmd.arg(arg);
         }
         cmd.cwd(&cwd);
+
+        // Auto-inject the user's login-shell PATH if the caller didn't
+        // override it. Fixes `env: node: No such file or directory` for
+        // CLI tools whose shebang resolves through /usr/bin/env.
+        let mut final_env = env;
+        if !final_env.contains_key("PATH") {
+            let path = user_shell_path();
+            if !path.is_empty() {
+                final_env.insert("PATH".to_string(), path.to_string());
+            }
+        }
+
         // Inject per-account env overrides (e.g. CODEX_HOME pointing at a
-        // specific account's credential directory).
-        for (k, v) in env {
+        // specific account's credential directory) and the resolved PATH.
+        for (k, v) in final_env {
             cmd.env(k, v);
         }
 

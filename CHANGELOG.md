@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-05-17
+
+### Fixed
+
+- **`env: node: No such file or directory`** when spawning CLIs / services.
+  macOS GUI apps inherit a minimal PATH that doesn't include Homebrew /
+  nvm / asdf locations, so any script with `#!/usr/bin/env node` (or
+  `python`, `ruby`, etc.) would fail. PtyManager::spawn now auto-resolves
+  the user's login-shell PATH (`$SHELL -lc 'echo $PATH'`) on first call,
+  caches it for the app lifetime, and injects it into every PTY spawn
+  that doesn't already specify PATH. Fixes Codex CLI login, Claude CLI
+  login, "Run All Services" against pnpm/npm projects, and lane bash
+  PTYs that need full PATH access.
+
 ## [0.1.8] — 2026-05-17
 
 ### Added
