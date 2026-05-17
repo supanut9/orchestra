@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-05-17
+
+Substantial release — lane agents now drive their own terminals, a
+VS Code-style resizable bottom panel, command palette, terminal hand-off
+to AI, chat memory persistence, and a handful of CLI-provider fixes.
+
+### Added
+
+- **Command palette (Cmd/Ctrl+K)** — fuzzy launcher for workspace and editor
+  actions.
+- **Resizable bottom panel** — drag the splitter to give Terminal / Services /
+  Lanes / MCP / Skills / Memory more room. State persists.
+- **Hand-to-AI / reclaim button per terminal tab** — explicitly give a PTY
+  to an agent (or take it back) so the model knows which terminals it owns.
+- **`pty.owner` events** — the UI now reacts immediately when ownership of a
+  PTY changes.
+- **Lane agent drives the lane's own PTY** — when you approve a lane, the
+  agent shell tool now targets the lane's bash terminal so all commands run
+  in the right worktree.
+- **Shell tool gets `targetPtyId`** — agent can pin its commands to a specific
+  PTY instead of always spawning a fresh one.
+- **Services Run All** — spinner while spawning + success toast.
+- **Chat turns persist to Rust memory IPC** — every user/assistant message
+  is recorded into the per-workspace sqlite store so we can do semantic
+  recall in a later release.
+
+### Fixed
+
+- **CLI providers can't use shell tools (yet).** AgentPanel routes
+  claude-cli / codex-cli / gemini-cli through `streamMessage` instead of
+  `streamWithTools`; the Shell tools checkbox is disabled with a tooltip
+  for those providers.
+- **LaneBoard Coordinator was always producing mock lanes.** Now wires
+  the active provider's LanguageModel into the real `generateObject` call
+  (when an API provider is active; CLI providers still fall back to mock
+  decomposition).
+- **LaneBoard crashed for CLI providers.** Same root cause as the chat panel
+  bug — `createProvider` doesn't know CLI IDs. Guarded with `isCliProvider`.
+
 ## [0.1.4] — 2026-05-16
 
 - **New app icon.** Replaces the plain purple placeholder with a designed
