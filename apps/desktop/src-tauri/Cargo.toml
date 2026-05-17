@@ -34,7 +34,7 @@ tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 
 # PTY — Wezterm's cross-platform portable-pty (includes Windows ConPTY)
 # Published latest is 0.8.x on crates.io; bump to ^0.9 once it ships.
-portable-pty  = "^0.8"
+portable-pty  = "^0.9"
 
 # File watching
 notify = "^7"
