@@ -13,7 +13,23 @@
 
 import { ptySpawn, ptyKill, subscribeToPtyOutput, subscribeToPtyStatus } from '@/lib/ipc/pty';
 import type { CliProviderConfig } from '@/stores/settings';
-import { DEFAULT_CLI_ARGS } from '@/stores/settings';
+import { DEFAULT_CLI_ARGS, CLI_CONFIG_ENV_VAR } from '@/stores/settings';
+import { useSettingsStore } from '@/stores/settings';
+
+/**
+ * Resolve the env-var injection for the active CLI account.
+ * Returns {} when no account is selected — the CLI will fall back to its
+ * default location (e.g. ~/.codex/).
+ */
+function activeAccountEnv(providerId: CliProviderConfig['providerId']): Record<string, string> {
+  const state = useSettingsStore.getState();
+  const activeId = state.activeCliAccountId[providerId];
+  if (!activeId) return {};
+  const account = state.cliAccounts.find((a) => a.id === activeId);
+  if (!account) return {};
+  const envVar = CLI_CONFIG_ENV_VAR[providerId];
+  return { [envVar]: account.credentialDir };
+}
 
 /** Strip ANSI escape sequences for chat-panel display. */
 function stripAnsi(input: string): string {
@@ -48,7 +64,10 @@ export async function streamCli(opts: StreamCliOptions): Promise<void> {
   const argvTemplate = config.args ?? DEFAULT_CLI_ARGS[config.providerId];
   const argv = [config.binaryPath, ...argvTemplate.map((a) => a.replace('{PROMPT}', prompt))];
 
-  const ptyId = await ptySpawn(`${config.providerId}`, argv, cwd, { kind: 'user' });
+  // Per-account env override — points the CLI at its profile's credential dir.
+  const env = activeAccountEnv(config.providerId);
+
+  const ptyId = await ptySpawn(`${config.providerId}`, argv, cwd, { kind: 'user' }, env);
 
   // Subscribe to output and forward decoded text (sans ANSI).
   const unlistenOutput = await subscribeToPtyOutput(ptyId, (bytes) => {

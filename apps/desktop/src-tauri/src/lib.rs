@@ -66,6 +66,9 @@ pub fn run() {
             mcp::commands::mcp_status,
             // System helpers
             system::commands::detect_binary,
+            system::commands::cli_account_create_dir,
+            system::commands::cli_account_remove_dir,
+            system::commands::cli_account_has_credentials,
             // Lanes (Sprint 4 stub)
             ipc::list_lanes,
         ])

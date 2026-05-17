@@ -138,6 +138,7 @@ impl PtyManager {
         command: Vec<String>,
         cwd: PathBuf,
         owner: PtyOwner,
+        env: std::collections::HashMap<String, String>,
         app_handle: AppHandle,
     ) -> Result<String, String> {
         if command.is_empty() {
@@ -163,6 +164,11 @@ impl PtyManager {
             cmd.arg(arg);
         }
         cmd.cwd(&cwd);
+        // Inject per-account env overrides (e.g. CODEX_HOME pointing at a
+        // specific account's credential directory).
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
 
         // Spawn the child process inside the PTY slave.
         let child = pair

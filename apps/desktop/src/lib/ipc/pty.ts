@@ -101,8 +101,15 @@ export function ptySpawn(
   command: string[],
   cwd: string,
   owner: PtyOwner = { kind: 'user' },
+  env?: Record<string, string>,
 ): Promise<string> {
-  return invoke<string>('pty_spawn', { label, command, cwd, owner });
+  return invoke<string>('pty_spawn', {
+    label,
+    command,
+    cwd,
+    owner,
+    ...(env && Object.keys(env).length > 0 ? { env } : {}),
+  });
 }
 
 /**

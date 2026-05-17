@@ -74,11 +74,13 @@ pub fn services_run_all(
     let mut pty_ids = Vec::with_capacity(services.len());
 
     for svc in services {
+        let svc_env = svc.env.clone();
         match manager.spawn(
             svc.name.clone(),
             svc.command,
             svc.cwd,
             PtyOwner::User,
+            svc_env,
             app.clone(),
         ) {
             Ok(id) => pty_ids.push(id),
@@ -134,6 +136,7 @@ pub fn services_run_one(
         svc.command,
         svc.cwd,
         PtyOwner::User,
+        svc.env,
         app,
     )
 }

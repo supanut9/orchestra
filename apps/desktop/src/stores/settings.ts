@@ -25,6 +25,29 @@ export type ProviderId =
 
 export type CliProviderId = 'claude-cli' | 'codex-cli' | 'gemini-cli';
 
+/**
+ * A named credential profile for a CLI provider. Each account corresponds to
+ * its own directory under ~/.orchestra/cli-accounts/<id>/, which Orchestra
+ * passes to the CLI via a per-provider env var on spawn (CLAUDE_CONFIG_DIR,
+ * CODEX_HOME, GEMINI_HOME). Switching between accounts is just swapping
+ * which env var path Orchestra injects — zero filesystem mutation.
+ */
+export interface CliAccount {
+  id: string;
+  providerId: CliProviderId;
+  label: string;
+  /** Absolute path returned by `cli_account_create_dir`. */
+  credentialDir: string;
+  createdAt: string;
+}
+
+/** Env var each CLI consults for its credential / config directory. */
+export const CLI_CONFIG_ENV_VAR: Record<CliProviderId, string> = {
+  'claude-cli': 'CLAUDE_CONFIG_DIR',
+  'codex-cli': 'CODEX_HOME',
+  'gemini-cli': 'GEMINI_HOME',
+};
+
 export interface AnthropicConfig {
   providerId: 'anthropic';
   apiKey: string;
@@ -110,17 +133,37 @@ interface SettingsState {
   activeProviderId: ProviderId | null;
   activeModelId: string | null;
 
+  /** Multi-account profiles for CLI providers. */
+  cliAccounts: CliAccount[];
+  /** Active account ID per CLI provider. */
+  activeCliAccountId: Partial<Record<CliProviderId, string>>;
+
   // ── Actions ───────────────────────────────────────────────────────────────
   setProviderConfig: (config: ProviderConfig) => void;
   removeProvider: (id: ProviderId) => void;
   setActiveProvider: (id: ProviderId, modelId?: string) => void;
   clearActiveProvider: () => void;
+
+  /** Add a new CLI account profile. Caller is responsible for ensuring the
+   *  credential dir was created via `cliAccountCreateDir`. */
+  addCliAccount: (account: CliAccount) => void;
+  /** Remove a CLI account profile (the directory is removed separately). */
+  removeCliAccount: (id: string) => void;
+  /** Switch the active account for a CLI provider. */
+  setActiveCliAccount: (providerId: CliProviderId, accountId: string | null) => void;
+  /** Rename a CLI account. */
+  renameCliAccount: (id: string, label: string) => void;
 }
 
-const initialState: Pick<SettingsState, 'providers' | 'activeProviderId' | 'activeModelId'> = {
+const initialState: Pick<
+  SettingsState,
+  'providers' | 'activeProviderId' | 'activeModelId' | 'cliAccounts' | 'activeCliAccountId'
+> = {
   providers: {},
   activeProviderId: null,
   activeModelId: null,
+  cliAccounts: [],
+  activeCliAccountId: {},
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -154,6 +197,53 @@ export const useSettingsStore = create<SettingsState>()(
         })),
 
       clearActiveProvider: () => set({ activeProviderId: null, activeModelId: null }),
+
+      addCliAccount: (account) =>
+        set((state) => {
+          // If this is the first account for that provider, mark it active.
+          const isFirst = !state.cliAccounts.some((a) => a.providerId === account.providerId);
+          return {
+            cliAccounts: [...state.cliAccounts, account],
+            activeCliAccountId: isFirst
+              ? { ...state.activeCliAccountId, [account.providerId]: account.id }
+              : state.activeCliAccountId,
+          };
+        }),
+
+      removeCliAccount: (id) =>
+        set((state) => {
+          const removed = state.cliAccounts.find((a) => a.id === id);
+          if (!removed) return {};
+          const remaining = state.cliAccounts.filter((a) => a.id !== id);
+          const nextActive = { ...state.activeCliAccountId };
+          if (nextActive[removed.providerId] === id) {
+            const replacement = remaining.find((a) => a.providerId === removed.providerId);
+            if (replacement) {
+              nextActive[removed.providerId] = replacement.id;
+            } else {
+              delete nextActive[removed.providerId];
+            }
+          }
+          return { cliAccounts: remaining, activeCliAccountId: nextActive };
+        }),
+
+      setActiveCliAccount: (providerId, accountId) =>
+        set((state) => {
+          const next = { ...state.activeCliAccountId };
+          if (accountId === null) {
+            delete next[providerId];
+          } else {
+            next[providerId] = accountId;
+          }
+          return { activeCliAccountId: next };
+        }),
+
+      renameCliAccount: (id, label) =>
+        set((state) => ({
+          cliAccounts: state.cliAccounts.map((a) =>
+            a.id === id ? { ...a, label: label.trim() || a.label } : a,
+          ),
+        })),
     }),
     {
       name: 'orchestra-settings',
@@ -165,6 +255,8 @@ export const useSettingsStore = create<SettingsState>()(
         providers: state.providers,
         activeProviderId: state.activeProviderId,
         activeModelId: state.activeModelId,
+        cliAccounts: state.cliAccounts,
+        activeCliAccountId: state.activeCliAccountId,
       }),
     },
   ),

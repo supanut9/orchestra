@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-05-17
+
+### Added
+
+- **Multi-account CLI providers.** Each CLI (Claude / Codex / Gemini) can
+  now hold N named credential profiles. Settings → CLI row → Accounts
+  section lists every profile with a green dot for the active one;
+  clicking the dot switches without touching the filesystem.
+- **Per-account credential directory.** Each profile lives under
+  `~/.orchestra/cli-accounts/<id>/`. When Orchestra spawns the CLI it
+  passes the directory via a per-provider env var
+  (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`) so the CLI reads
+  the right tokens. Zero logout/login dance.
+- **Add Account flow.** Type a label, click Add — Orchestra creates a
+  fresh credential dir and opens a Terminal tab running
+  `<cli> login` with the env var set. Complete OAuth in your browser;
+  tokens save into that dir. The account is then permanently switchable
+  in one click.
+- **Active account surfaces in the agent provider dropdown.** When a CLI
+  provider is configured the dropdown shows e.g. "Codex CLI (Work)" so
+  you always know which subscription is about to be billed.
+- **Rename / remove accounts** inline (hover → pencil / trash buttons).
+  Removing also deletes the credential directory on disk.
+
+### Plumbing
+
+- `pty_spawn` now accepts an optional `env` map; the existing service
+  parser passes `service.env` through automatically.
+- New Rust commands: `cli_account_create_dir`, `cli_account_remove_dir`,
+  `cli_account_has_credentials` — manage the credential-directory
+  lifecycle and let the Add Account flow poll for completion.
+
+### Coming next (v0.1.9)
+
+- Auto-rotate on rate-limit detection: when the CLI emits a "quota
+  exceeded" line Orchestra will automatically switch to the next
+  configured account and retry the message.
+
 ## [0.1.7] — 2026-05-17
 
 ### Added

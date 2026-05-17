@@ -259,11 +259,28 @@ export function AgentPanel() {
           className="flex-1 rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
         >
           <option value="">— Select provider —</option>
-          {(Object.keys(providers) as ProviderId[]).map((id) => (
-            <option key={id} value={id}>
-              {PROVIDER_LABELS[id]} ({providers[id]?.model ?? 'default'})
-            </option>
-          ))}
+          {(Object.keys(providers) as ProviderId[]).map((id) => {
+            // For CLI providers, surface the active account label so the
+            // user knows which credential profile each message will use.
+            const cfg = providers[id];
+            const isCli = !!cfg && isCliProvider(cfg);
+            const activeAccountId = isCli
+              ? useSettingsStore.getState().activeCliAccountId[id as 'claude-cli' | 'codex-cli' | 'gemini-cli']
+              : undefined;
+            const activeAccount = activeAccountId
+              ? useSettingsStore.getState().cliAccounts.find((a) => a.id === activeAccountId)
+              : null;
+            const suffix = isCli
+              ? activeAccount
+                ? activeAccount.label
+                : 'default auth'
+              : (cfg?.model ?? 'default');
+            return (
+              <option key={id} value={id}>
+                {PROVIDER_LABELS[id]} ({suffix})
+              </option>
+            );
+          })}
         </select>
 
         <button

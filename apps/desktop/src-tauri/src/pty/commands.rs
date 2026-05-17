@@ -31,6 +31,7 @@ pub fn pty_spawn(
     command: Vec<String>,
     cwd: String,
     owner: PtyOwner,
+    env: Option<std::collections::HashMap<String, String>>,
     state: State<'_, PtyState>,
     app: AppHandle,
 ) -> Result<String, String> {
@@ -39,7 +40,14 @@ pub fn pty_spawn(
         .lock()
         .map_err(|e| format!("manager lock poisoned: {e}"))?;
 
-    manager.spawn(label, command, PathBuf::from(cwd), owner, app)
+    manager.spawn(
+        label,
+        command,
+        PathBuf::from(cwd),
+        owner,
+        env.unwrap_or_default(),
+        app,
+    )
 }
 
 // ── pty_write ─────────────────────────────────────────────────────────────────

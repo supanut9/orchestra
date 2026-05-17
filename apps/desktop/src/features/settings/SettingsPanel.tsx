@@ -8,6 +8,7 @@ import type {
 } from '@/stores/settings';
 import { testProviderConnection } from '@/lib/ai/provider-registry';
 import { detectBinary } from '@/lib/ipc/system';
+import { CliAccountsManager } from './CliAccountsManager';
 
 /** Strip the `-cli` suffix → "claude-cli" → "claude". */
 function cliBinaryName(id: CliProviderId): string {
@@ -337,6 +338,11 @@ function ProviderRow({ meta }: ProviderRowProps) {
             </p>
           )}
         </div>
+      )}
+
+      {/* Multi-account profiles (claude-cli / codex-cli / gemini-cli) */}
+      {meta.isCli && isCliId(meta.id) && (
+        <CliAccountsManager providerId={meta.id} binaryPath={binaryPath} />
       )}
 
       {/* Model select — only for non-CLI providers (CLIs pick their own) */}
