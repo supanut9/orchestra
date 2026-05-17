@@ -106,6 +106,12 @@ export function Terminal({ ptyId, isActive = true }: TerminalProps) {
 
     term.open(containerRef.current);
     fitAddon.fit();
+    // xterm.js only forwards keystrokes when its internal textarea has focus.
+    // Without this, keypresses silently fall through to the rest of the app
+    // and the user sees a dead terminal. focus() on mount + a click handler
+    // (below) covers both "user just opened the tab" and "user clicked back
+    // in after touching the sidebar/editor".
+    term.focus();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -188,6 +194,9 @@ export function Terminal({ ptyId, isActive = true }: TerminalProps) {
         fitAddonRef.current?.fit();
         if (termRef.current) {
           ptyResize(ptyId, termRef.current.rows, termRef.current.cols).catch(() => {});
+          // Switching tabs to this terminal should land focus inside it so
+          // the user can start typing without an extra click.
+          termRef.current.focus();
         }
       });
     }
@@ -207,11 +216,20 @@ export function Terminal({ ptyId, isActive = true }: TerminalProps) {
     }
   }, []);
 
+  // Any click anywhere inside the terminal area should refocus xterm's
+  // hidden textarea. Without this, clicking the canvas (or even the
+  // surrounding padding) can leave focus on the previously-focused element
+  // and the terminal looks frozen.
+  const handleClick = useCallback(() => {
+    termRef.current?.focus();
+  }, []);
+
   return (
     <div
       ref={containerRef}
       className="h-full w-full overflow-hidden bg-[#0d0d0d]"
       onKeyDown={handleKeyDown}
+      onMouseDown={handleClick}
       // Allow xterm to capture focus directly.
       tabIndex={0}
       style={{ outline: 'none' }}

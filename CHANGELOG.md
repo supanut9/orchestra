@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] — 2026-05-17
+
+### Fixed
+
+- **Terminal didn't accept typed input.** xterm.js only forwards
+  keystrokes when its hidden textarea has focus, but nothing in the
+  Terminal component ever called `term.focus()`. As a result, opening
+  or switching to a terminal tab left focus on whichever element the
+  user touched last (sidebar, editor, settings panel), and typing
+  silently fell through. The terminal now grabs focus on mount, on
+  tab activation, and on any mouse-down inside its area.
+
 ## [0.1.12] — 2026-05-17
 
 ### Added
