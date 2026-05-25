@@ -35,7 +35,7 @@
     "@ai-sdk/google": "catalog:",
     "@ai-sdk/openai-compatible": "^0.2.0",
     "zod": "catalog:",
-    "@langchain/langgraph": "^0.2.50",
+    "@langchain/langgraph": "^1.3.2",
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
