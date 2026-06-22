@@ -27,7 +27,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "zod": "catalog:",
-    "nanoid": "^5.0.9"
+    "nanoid": "^5.1.15"
   },
   "devDependencies": {
     "typescript": "catalog:",
